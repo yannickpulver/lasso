@@ -47,14 +47,16 @@ final class ResultPanel: NSObject {
         let previousFrame = (panel?.isVisible == true) ? panel?.frame : nil
         dismiss()
 
-        // Frosted-glass card
+        // Frosted-glass card. The material is composited behind the window by
+        // the window server, so it must be clipped with maskImage — a plain
+        // layer cornerRadius leaves opaque corners outside the rounding.
         let card = NSVisualEffectView()
         card.material = .hudWindow
         card.blendingMode = .behindWindow
         card.state = .active
+        card.maskImage = Self.roundedMask(radius: 18)
         card.wantsLayer = true
         card.layer?.cornerRadius = 18
-        card.layer?.masksToBounds = true
         card.layer?.borderWidth = 1
         card.layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
 
@@ -97,6 +99,7 @@ final class ResultPanel: NSObject {
 
         panel.alphaValue = 0
         panel.makeKeyAndOrderFront(nil)
+        panel.invalidateShadow() // recompute shadow against the rounded mask
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.18
             panel.animator().alphaValue = 1
@@ -114,6 +117,19 @@ final class ResultPanel: NSObject {
             }
             return event
         }
+    }
+
+    /// Stretchable rounded-rect mask for the visual effect material.
+    private static func roundedMask(radius: CGFloat) -> NSImage {
+        let edge = radius * 2 + 1
+        let mask = NSImage(size: NSSize(width: edge, height: edge), flipped: false) { rect in
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+            return true
+        }
+        mask.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
+        mask.resizingMode = .stretch
+        return mask
     }
 
     // MARK: - Content builders
