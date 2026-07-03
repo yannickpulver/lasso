@@ -1,24 +1,28 @@
 import AppKit
 
 @MainActor
-final class ResultPanel {
+final class ResultPanel: NSObject {
     private var panel: NSPanel?
     private var textView: NSTextView?
+    private var hasButton = false
+    private var action: (() -> Void)?
 
     func showLoading() {
-        show(text: "Thinking…")
+        show(text: "Thinking…", actionTitle: nil, action: nil)
     }
 
-    func showText(_ text: String) {
-        if panel == nil {
-            show(text: text)
-        } else {
+    func showText(_ text: String, actionTitle: String? = nil, action: (() -> Void)? = nil) {
+        if panel != nil, actionTitle == nil, !hasButton {
             textView?.string = text
+        } else {
+            show(text: text, actionTitle: actionTitle, action: action)
         }
     }
 
-    private func show(text: String) {
+    private func show(text: String, actionTitle: String?, action: (() -> Void)?) {
         panel?.close()
+        self.action = action
+        self.hasButton = actionTitle != nil
 
         let width: CGFloat = 420
         let height: CGFloat = 260
@@ -43,10 +47,32 @@ final class ResultPanel {
         textView.font = .systemFont(ofSize: 13)
         textView.textContainerInset = NSSize(width: 12, height: 12)
 
-        panel.contentView = scrollView
+        let buttonArea: CGFloat = actionTitle != nil ? 48 : 0
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        scrollView.frame = NSRect(x: 0, y: buttonArea, width: width, height: height - buttonArea)
+        scrollView.autoresizingMask = [.width, .height]
+        container.addSubview(scrollView)
+
+        if let actionTitle {
+            let button = NSButton(title: actionTitle, target: self, action: #selector(runAction))
+            button.bezelStyle = .rounded
+            button.sizeToFit()
+            button.setFrameOrigin(NSPoint(
+                x: (width - button.frame.width) / 2,
+                y: (buttonArea - button.frame.height) / 2
+            ))
+            button.autoresizingMask = [.minXMargin, .maxXMargin, .maxYMargin]
+            container.addSubview(button)
+        }
+
+        panel.contentView = container
         panel.makeKeyAndOrderFront(nil)
 
         self.panel = panel
         self.textView = textView
+    }
+
+    @objc private func runAction() {
+        action?()
     }
 }

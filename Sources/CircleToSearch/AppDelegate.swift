@@ -37,8 +37,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 try? await Task.sleep(for: .milliseconds(80))
                 guard let imageData = ScreenCapture.capture(rect: rect) else {
                     await resultPanel.showText(
-                        "Couldn't capture the screen. Grant Screen Recording permission to your terminal (System Settings → Privacy & Security → Screen & System Audio Recording), then fully restart the terminal and run again."
-                    )
+                        "Couldn't capture the screen. Grant Screen Recording permission to your terminal, then fully restart the terminal and run again.",
+                        actionTitle: "Open Screen Recording Settings"
+                    ) {
+                        NSWorkspace.shared.open(URL(
+                            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+                        )!)
+                    }
                     return
                 }
                 await resultPanel.showLoading()
