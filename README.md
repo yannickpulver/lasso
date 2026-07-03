@@ -6,16 +6,14 @@ macOS menu-bar app.
 
 ## Run
 
-With Claude Code installed (uses your Claude subscription, no API key):
+Answer providers, in priority order:
+
+1. **Gemini** (fastest, ~1–3s): `export GEMINI_API_KEY=...` (free key at aistudio.google.com)
+2. **Claude API**: `export ANTHROPIC_API_KEY=sk-ant-...`
+3. **Claude Code CLI** (no key, uses your Claude subscription, ~10–30s): neither env var set
 
 ```bash
-swift run
-```
-
-Or with an API key (takes precedence over the `claude` CLI when set):
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+export GEMINI_API_KEY=...
 swift run
 ```
 

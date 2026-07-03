@@ -48,10 +48,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 await resultPanel.showLoading()
                 do {
-                    let hasAPIKey = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"]?.isEmpty == false
-                    let answer = hasAPIKey
-                        ? try await ClaudeClient.ask(imageData: imageData)
-                        : try await ClaudeCodeClient.ask(imageData: imageData)
+                    let env = ProcessInfo.processInfo.environment
+                    let answer: String
+                    if env["GEMINI_API_KEY"]?.isEmpty == false {
+                        answer = try await GeminiClient.ask(imageData: imageData)
+                    } else if env["ANTHROPIC_API_KEY"]?.isEmpty == false {
+                        answer = try await ClaudeClient.ask(imageData: imageData)
+                    } else {
+                        answer = try await ClaudeCodeClient.ask(imageData: imageData)
+                    }
                     await resultPanel.showText(answer)
                 } catch {
                     await resultPanel.showText("Error: \(error.localizedDescription)")
