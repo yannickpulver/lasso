@@ -29,4 +29,42 @@ final class AnswerTests: XCTestCase {
         XCTAssertEqual(answer.title, "Title here")
         XCTAssertEqual(answer.body, "Body line")
     }
+
+    func testParseKindAndFollowUps() {
+        let answer = Answer.parse(text: """
+        Sony WH-1000XM6 — noise-cancelling headphones
+        💰 Around $450
+        KIND: product
+        FOLLOWUP: Where can I buy this cheapest nearby?
+        FOLLOWUP: Are there better alternatives?
+        """)
+        XCTAssertEqual(answer.kind, .product)
+        XCTAssertEqual(answer.followUps, [
+            "Where can I buy this cheapest nearby?",
+            "Are there better alternatives?",
+        ])
+        XCTAssertFalse(answer.body.contains("KIND:"))
+        XCTAssertFalse(answer.body.contains("FOLLOWUP:"))
+    }
+
+    func testParseUnknownKindFallsBackToOther() {
+        let answer = Answer.parse(text: "Title\nKIND: banana")
+        XCTAssertEqual(answer.kind, .other)
+    }
+
+    func testParseDefaultsWithoutMachineLines() {
+        let answer = Answer.parse(text: "Just a title")
+        XCTAssertEqual(answer.kind, .other)
+        XCTAssertTrue(answer.followUps.isEmpty)
+    }
+
+    func testEntityNameStripsDashSuffix() {
+        let answer = Answer.parse(text: "Café Fédéral — coffee house in Bern")
+        XCTAssertEqual(answer.entityName, "Café Fédéral")
+    }
+
+    func testEntityNameWithoutDashIsFullTitle() {
+        let answer = Answer.parse(text: "Eiffel Tower")
+        XCTAssertEqual(answer.entityName, "Eiffel Tower")
+    }
 }
