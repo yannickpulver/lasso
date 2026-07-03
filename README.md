@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/icon.png" width="128" alt="Lasso icon">
+</p>
+
 # Lasso 🤠
 
 Press **⌃⌥X**, lasso anything on your screen with a glowing sparkle stroke,
