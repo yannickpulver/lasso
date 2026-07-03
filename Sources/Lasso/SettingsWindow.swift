@@ -1,4 +1,5 @@
 import AppKit
+import CoreGraphics
 import SwiftUI
 
 @MainActor
@@ -36,49 +37,74 @@ struct SettingsView: View {
     @State private var shortcut = Shortcut.load()
     @State private var isRecording = false
     @State private var keyMonitor: Any?
+    @State private var screenRecordingGranted = CGPreflightScreenCaptureAccess()
     var onSaved: () -> Void
     var onShortcutChange: (Shortcut) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             Text("Press \(shortcut.displayString) to lasso anything on screen.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Gemini API Key")
-                    .font(.headline)
-                SecureField("AIza…", text: $apiKey)
-                    .textFieldStyle(.roundedBorder)
-                Link("Get a free key at aistudio.google.com",
-                     destination: URL(string: "https://aistudio.google.com/apikey")!)
-                    .font(.caption)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Shortcut")
-                    .font(.headline)
-                HStack {
-                    Button(isRecording ? "Press keys… (⎋ to cancel)" : shortcut.displayString) {
-                        isRecording ? stopRecording() : startRecording()
-                    }
-                    if shortcut != .default && !isRecording {
-                        Button("Reset") {
-                            apply(.default)
-                        }
-                        .buttonStyle(.borderless)
+            GroupBox("Gemini API Key") {
+                VStack(alignment: .leading, spacing: 6) {
+                    SecureField("AIza…", text: $apiKey)
+                        .textFieldStyle(.roundedBorder)
+                    Link("Get a free key at aistudio.google.com",
+                         destination: URL(string: "https://aistudio.google.com/apikey")!)
                         .font(.caption)
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundStyle(.red)
                     }
                 }
-                Text("Hold ⌃, ⌥ or ⌘ plus a key.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(6)
             }
 
-            if let errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.red)
+            GroupBox("Shortcut") {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Button(isRecording ? "Press keys… (⎋ to cancel)" : shortcut.displayString) {
+                            isRecording ? stopRecording() : startRecording()
+                        }
+                        if shortcut != .default && !isRecording {
+                            Button("Reset") {
+                                apply(.default)
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+                        }
+                    }
+                    Text("Hold ⌃, ⌥ or ⌘ plus a key.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(6)
+            }
+
+            GroupBox("Permissions") {
+                HStack(spacing: 8) {
+                    Image(systemName: screenRecordingGranted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(screenRecordingGranted ? .green : .orange)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Screen Recording")
+                        if !screenRecordingGranted {
+                            Text("Required to capture what you lasso. Relaunch Lasso after granting.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                    if !screenRecordingGranted {
+                        Button("Grant…") { requestScreenRecording() }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(6)
             }
 
             HStack {
@@ -98,8 +124,23 @@ struct SettingsView: View {
             }
         }
         .padding(20)
-        .frame(width: 380)
+        .frame(width: 400)
         .onDisappear { stopRecording() }
+        // Re-check when the window regains focus (e.g. returning from System Settings).
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            screenRecordingGranted = CGPreflightScreenCaptureAccess()
+        }
+    }
+
+    private func requestScreenRecording() {
+        // Prompts on first ask; if previously denied, macOS shows nothing —
+        // send the user to the settings pane as well.
+        if !CGRequestScreenCaptureAccess() {
+            NSWorkspace.shared.open(URL(
+                string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+            )!)
+        }
+        screenRecordingGranted = CGPreflightScreenCaptureAccess()
     }
 
     private func startRecording() {
