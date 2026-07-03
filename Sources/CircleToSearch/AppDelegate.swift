@@ -35,7 +35,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // let the overlay window fully disappear before capturing,
                 // so the dim/stroke never shows up in the screenshot
                 try? await Task.sleep(for: .milliseconds(80))
-                guard let imageData = ScreenCapture.capture(rect: rect) else { return }
+                guard let imageData = ScreenCapture.capture(rect: rect) else {
+                    await resultPanel.showText(
+                        "Couldn't capture the screen. Grant Screen Recording permission to your terminal (System Settings → Privacy & Security → Screen & System Audio Recording), then fully restart the terminal and run again."
+                    )
+                    return
+                }
                 await resultPanel.showLoading()
                 do {
                     let answer = try await ClaudeClient.ask(imageData: imageData)
