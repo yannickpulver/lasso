@@ -13,7 +13,10 @@ final class ResultPanel: NSObject {
 
     func showText(_ text: String, actionTitle: String? = nil, action: (() -> Void)? = nil) {
         if panel != nil, actionTitle == nil, !hasButton {
-            textView?.string = text
+            if let textView {
+                textView.string = text
+                Self.detectLinks(in: textView)
+            }
         } else {
             show(text: text, actionTitle: actionTitle, action: action)
         }
@@ -46,6 +49,7 @@ final class ResultPanel: NSObject {
         textView.string = text
         textView.font = .systemFont(ofSize: 13)
         textView.textContainerInset = NSSize(width: 12, height: 12)
+        Self.detectLinks(in: textView)
 
         let buttonArea: CGFloat = actionTitle != nil ? 48 : 0
         let container = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
@@ -74,5 +78,13 @@ final class ResultPanel: NSObject {
 
     @objc private func runAction() {
         action?()
+    }
+
+    /// Turns plain-text URLs into clickable links.
+    private static func detectLinks(in textView: NSTextView) {
+        textView.isEditable = true
+        textView.isAutomaticLinkDetectionEnabled = true
+        textView.checkTextInDocument(nil)
+        textView.isEditable = false
     }
 }

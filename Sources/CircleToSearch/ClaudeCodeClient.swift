@@ -44,7 +44,8 @@ enum ClaudeCodeClient {
         process.currentDirectoryURL = workDir
         process.arguments = [
             "-p",
-            "Look at the image file capture.png in the current directory and identify what's in it. Explain concisely.",
+            "Look at the image file capture.png in the current directory. " + AnswerPrompt.text
+                + " You may use your web search capability to identify what you see.",
         ]
         let out = Pipe()
         let err = Pipe()

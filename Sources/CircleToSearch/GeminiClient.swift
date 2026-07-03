@@ -3,7 +3,7 @@ import Foundation
 /// Answers via the Gemini API (fast, cheap vision). Used when GEMINI_API_KEY is set.
 public enum GeminiClient {
     public static let model = "gemini-3.5-flash"
-    static let defaultPrompt = "Identify what's in this screenshot and explain it concisely."
+    static let defaultPrompt = AnswerPrompt.text
 
     public static func buildRequestBody(imageData: Data, prompt: String) -> [String: Any] {
         [
@@ -19,7 +19,10 @@ public enum GeminiClient {
                         ["text": prompt],
                     ],
                 ]
-            ]
+            ],
+            "tools": [
+                ["google_search": [String: Any]()]
+            ],
         ]
     }
 
@@ -56,11 +59,25 @@ public enum GeminiClient {
               let parts = content["parts"] as? [[String: Any]] else {
             throw ClaudeError.badResponse
         }
-        let text = parts
+        var text = parts
             .compactMap { $0["text"] as? String }
             .joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw ClaudeError.badResponse }
+
+        // Append grounding sources (web search results Gemini used)
+        if let grounding = candidates.first?["groundingMetadata"] as? [String: Any],
+           let chunks = grounding["groundingChunks"] as? [[String: Any]] {
+            let sources = chunks.prefix(4).compactMap { chunk -> String? in
+                guard let web = chunk["web"] as? [String: Any],
+                      let uri = web["uri"] as? String else { return nil }
+                let title = (web["title"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+                return title.map { "\($0) — \(uri)" } ?? uri
+            }
+            if !sources.isEmpty {
+                text += "\n\nSources:\n" + sources.joined(separator: "\n")
+            }
+        }
         return text
     }
 }

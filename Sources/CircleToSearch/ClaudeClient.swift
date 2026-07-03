@@ -16,7 +16,7 @@ public enum ClaudeError: Error, LocalizedError {
 
 public enum ClaudeClient {
     public static let model = "claude-opus-4-8"
-    static let defaultPrompt = "Identify what's in this screenshot and explain it concisely."
+    static let defaultPrompt = AnswerPrompt.text
 
     public static func buildRequestBody(imageData: Data, prompt: String) -> [String: Any] {
         [

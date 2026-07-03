@@ -18,6 +18,10 @@ final class GeminiClientTests: XCTestCase {
 
         XCTAssertEqual(parts[1]["text"] as? String, "What is this?")
 
+        // Google Search grounding tool must be declared
+        let tools = try XCTUnwrap(body["tools"] as? [[String: Any]])
+        XCTAssertNotNil(tools.first?["google_search"])
+
         XCTAssertEqual(GeminiClient.model, "gemini-3.5-flash")
         XCTAssertNoThrow(try JSONSerialization.data(withJSONObject: body))
     }
