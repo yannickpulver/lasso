@@ -22,6 +22,10 @@ final class GeminiClientTests: XCTestCase {
         let tools = try XCTUnwrap(body["tools"] as? [[String: Any]])
         XCTAssertNotNil(tools.first?["google_search"])
 
+        let generationConfig = try XCTUnwrap(body["generationConfig"] as? [String: Any])
+        let thinkingConfig = try XCTUnwrap(generationConfig["thinkingConfig"] as? [String: Any])
+        XCTAssertEqual(thinkingConfig["thinkingLevel"] as? String, "low")
+
         XCTAssertEqual(GeminiClient.model, "gemini-3.5-flash")
         XCTAssertNoThrow(try JSONSerialization.data(withJSONObject: body))
     }

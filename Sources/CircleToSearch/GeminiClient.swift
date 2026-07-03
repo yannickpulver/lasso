@@ -23,6 +23,10 @@ public enum GeminiClient {
             "tools": [
                 ["google_search": [String: Any]()]
             ],
+            // low = fast answers; bump to "medium"/"high" if identification quality drops
+            "generationConfig": [
+                "thinkingConfig": ["thinkingLevel": "low"]
+            ],
         ]
     }
 
