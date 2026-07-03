@@ -4,21 +4,26 @@ Press **⌃⌥X**, lasso anything on your screen with a glowing sparkle stroke,
 and AI tells you what and where it is — like Android's Circle to Search,
 as a macOS menu-bar app.
 
-## Run
-
-Answer providers, in priority order:
-
-1. **Gemini** (fastest, ~1–3s, with Google Search grounding): `export GEMINI_API_KEY=...` (free key at aistudio.google.com)
-2. **Claude API**: `export ANTHROPIC_API_KEY=sk-ant-...`
-3. **Claude Code CLI** (no key, uses your Claude subscription, ~10–30s): neither env var set
+## Install
 
 ```bash
-export GEMINI_API_KEY=...
+brew install yannickpulver/tap/lasso
+```
+
+Then: open Lasso, click the menu bar icon → **Settings…**, paste a Gemini API key
+(free at [aistudio.google.com](https://aistudio.google.com/apikey)).
+
+First capture: grant **Screen Recording** permission when prompted
+(System Settings → Privacy & Security → Screen & System Audio Recording), then relaunch Lasso.
+
+## Development
+
+```bash
 swift run
 ```
 
-First capture: grant **Screen Recording** permission to your terminal
-(System Settings → Privacy & Security → Screen & System Audio Recording), then re-run.
+Uses the key from Settings, or `GEMINI_API_KEY` env var as fallback.
+When running from a terminal, Screen Recording permission goes to the terminal app.
 
 ## Usage
 
@@ -32,6 +37,5 @@ First capture: grant **Screen Recording** permission to your terminal
 
 - Gemini model & thinking level: `Sources/Lasso/GeminiClient.swift`
   (default `gemini-3.5-flash`, `thinkingLevel: low`)
-- Claude model: `Sources/Lasso/ClaudeClient.swift` (default `claude-opus-4-8`)
 - Hotkey: `Sources/Lasso/HotkeyManager.swift` (`kVK_ANSI_X`, `controlKey | optionKey`)
 - Answer style: `Sources/Lasso/AnswerPrompt.swift`
