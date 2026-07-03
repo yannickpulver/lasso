@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Dispatch implementation subagents on a cheaper model (sonnet) — the plan contains complete code, so no deep reasoning is needed.**
 
-**Goal:** Menu-bar macOS app: press ⌃Tab → draw a circle/any shape around something on screen → Claude explains what's in it in a floating panel.
+**Goal:** Menu-bar macOS app: press ⌥⌘Space → draw a circle/any shape around something on screen → Claude explains what's in it in a floating panel.
 
 **Architecture:** Single SwiftPM executable (AppKit, no Xcode project). A transparent overlay window captures a freeform mouse-drawn path and yields its bounding box; the pixels come from `/usr/sbin/screencapture -x -R`; the image goes to the Claude Messages API via raw `URLSession` (Swift has no official Anthropic SDK); the answer renders in a non-activating floating `NSPanel`.
 
@@ -16,7 +16,7 @@
 - API headers exactly: `x-api-key`, `anthropic-version: 2023-06-01`, `content-type: application/json`
 - No third-party dependencies
 - App is menu-bar only: `NSApp.setActivationPolicy(.accessory)`
-- Global hotkey: **⌃Tab** (`kVK_Tab` = 48, modifier `controlKey`)
+- Global hotkey: **⌥⌘Space** (`kVK_Space` = 49, modifiers `optionKey | cmdKey`)
 - Esc during drawing, or a shape smaller than 10×10px → do nothing silently
 
 ---
@@ -87,8 +87,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         let menu = NSMenu()
-        let captureItem = NSMenuItem(title: "Circle & Ask", action: #selector(captureAndAsk), keyEquivalent: "\t")
-        captureItem.keyEquivalentModifierMask = [.control]
+        let captureItem = NSMenuItem(title: "Circle & Ask", action: #selector(captureAndAsk), keyEquivalent: " ")
+        captureItem.keyEquivalentModifierMask = [.option, .command]
         captureItem.target = self
         menu.addItem(captureItem)
         menu.addItem(.separator())
@@ -606,7 +606,7 @@ git commit -m "feat: rect screen capture via screencapture CLI"
 
 **Interfaces:**
 - Consumes: `ShapeOverlay.begin(completion:)`, `ScreenCapture.capture(rect:)`, `ClaudeClient.ask(imageData:)` from Tasks 2–5.
-- Produces: working app. `HotkeyManager` exposes `init(handler: @escaping () -> Void)` registering ⌃Tab via Carbon. `ResultPanel` exposes `showLoading()` and `showText(_:)`.
+- Produces: working app. `HotkeyManager` exposes `init(handler: @escaping () -> Void)` registering ⌥⌘Space via Carbon. `ResultPanel` exposes `showLoading()` and `showText(_:)`.
 
 - [ ] **Step 1: Write ResultPanel**
 
@@ -679,8 +679,7 @@ final class HotkeyManager {
     private var hotKeyRef: EventHotKeyRef?
     private static var handler: (() -> Void)?
 
-    /// Registers ⌃Tab as a global hotkey. Note: this shadows browser
-    /// tab-switching system-wide while the app runs.
+    /// Registers ⌥⌘Space as a global hotkey.
     init(handler: @escaping () -> Void) {
         HotkeyManager.handler = handler
 
@@ -699,8 +698,8 @@ final class HotkeyManager {
 
         let hotKeyID = EventHotKeyID(signature: OSType(0x4354_5321), id: 1) // "CTS!"
         RegisterEventHotKey(
-            UInt32(kVK_Tab),          // 48
-            UInt32(controlKey),       // ⌃
+            UInt32(kVK_Space),            // 49
+            UInt32(optionKey | cmdKey),   // ⌥⌘
             hotKeyID,
             GetApplicationEventTarget(),
             0,
@@ -731,8 +730,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         let menu = NSMenu()
-        let captureItem = NSMenuItem(title: "Circle & Ask", action: #selector(captureAndAsk), keyEquivalent: "\t")
-        captureItem.keyEquivalentModifierMask = [.control]
+        let captureItem = NSMenuItem(title: "Circle & Ask", action: #selector(captureAndAsk), keyEquivalent: " ")
+        captureItem.keyEquivalentModifierMask = [.option, .command]
         captureItem.target = self
         menu.addItem(captureItem)
         menu.addItem(.separator())
@@ -773,14 +772,13 @@ Expected: `Build complete!`, all tests PASS
 - [ ] **Step 5: Manual end-to-end verification**
 
 Run: `ANTHROPIC_API_KEY=sk-... swift run`
-Then: press ⌃Tab → screen dims → draw a circle around something → blue stroke follows the mouse → on release, panel shows "Thinking…" then the answer.
+Then: press ⌥⌘Space → screen dims → draw a circle around something → blue stroke follows the mouse → on release, panel shows "Thinking…" then the answer.
 
 Notes for the tester:
 - First capture: macOS prompts for **Screen Recording** permission for the terminal running `swift run`. Grant it (System Settings → Privacy & Security → Screen Recording) and re-run.
 - Esc while drawing → overlay closes, nothing else happens.
 - A tiny scribble (<10px) → overlay closes, nothing happens.
 - Without `ANTHROPIC_API_KEY` → panel shows "Error: ANTHROPIC_API_KEY is not set."
-- ⌃Tab won't switch browser tabs while the app runs (global hotkey shadows it) — expected.
 
 - [ ] **Step 6: Commit**
 
@@ -805,7 +803,7 @@ git commit -m "feat: hotkey, result panel, and end-to-end circle-to-answer flow"
 ````markdown
 # Circle to Search — for Mac
 
-Press **⌃Tab**, draw a circle (or any shape) around anything on your screen,
+Press **⌥⌘Space**, draw a circle (or any shape) around anything on your screen,
 and Claude tells you what it is — like Android's Circle to Search, as a
 macOS menu-bar app.
 
@@ -821,18 +819,15 @@ First capture: grant **Screen Recording** permission to your terminal
 
 ## Usage
 
-- **⌃Tab** (or menu bar icon → Circle & Ask): draw a shape, get an answer
+- **⌥⌘Space** (or menu bar icon → Circle & Ask): draw a shape, get an answer
 - **Esc** while drawing: cancel
 - Menu bar icon → Quit
-
-Note: while the app runs, ⌃Tab is captured globally and won't switch
-browser tabs.
 
 ## Configuration
 
 - Model: `ClaudeClient.model` in `Sources/CircleToSearch/ClaudeClient.swift`
   (default `claude-opus-4-8`; use `claude-haiku-4-5` for cheaper answers)
-- Hotkey: `HotkeyManager.swift` (`kVK_Tab`, `controlKey`)
+- Hotkey: `HotkeyManager.swift` (`kVK_Space`, `optionKey | cmdKey`)
 ````
 
 - [ ] **Step 2: Commit**
