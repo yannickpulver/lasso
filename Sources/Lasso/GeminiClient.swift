@@ -13,6 +13,16 @@ public enum GeminiClient {
         return nil
     }
 
+    /// Token counts from a generateContent response; thinking tokens are
+    /// billed as output.
+    static func parseUsage(_ json: [String: Any]) -> (input: Int, output: Int)? {
+        guard let usage = json["usageMetadata"] as? [String: Any] else { return nil }
+        let input = usage["promptTokenCount"] as? Int ?? 0
+        let output = (usage["candidatesTokenCount"] as? Int ?? 0)
+            + (usage["thoughtsTokenCount"] as? Int ?? 0)
+        return (input, output)
+    }
+
     public static func buildRequestBody(imageData: Data, prompt: String) -> [String: Any] {
         [
             "contents": [
@@ -63,6 +73,10 @@ public enum GeminiClient {
         guard http.statusCode == 200 else {
             let message = ((json["error"] as? [String: Any])?["message"] as? String) ?? "HTTP \(http.statusCode)"
             throw LassoError.apiError(message)
+        }
+
+        if let usage = parseUsage(json) {
+            UsageStore.record(input: usage.input, output: usage.output)
         }
 
         guard let candidates = json["candidates"] as? [[String: Any]],

@@ -7,16 +7,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let overlay = ShapeOverlay()
     private let resultPanel = ResultPanel()
     private let settingsWindow = SettingsWindowController()
+    private var captureItem: NSMenuItem!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        installEditMenu()
+
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.image =
             NSImage(systemSymbolName: "lasso.badge.sparkles", accessibilityDescription: "Lasso")
             ?? NSImage(systemSymbolName: "lasso", accessibilityDescription: "Lasso")
 
+        let shortcut = Shortcut.load()
         let menu = NSMenu()
-        let captureItem = NSMenuItem(title: "Lasso & Ask", action: #selector(captureAndAsk), keyEquivalent: "x")
-        captureItem.keyEquivalentModifierMask = [.control, .option]
+        captureItem = NSMenuItem(title: "Lasso & Ask", action: #selector(captureAndAsk), keyEquivalent: "")
         captureItem.target = self
         menu.addItem(captureItem)
         let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
@@ -25,10 +28,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
+        updateCaptureItem(shortcut)
 
-        hotkeyManager = HotkeyManager { [weak self] in
+        hotkeyManager = HotkeyManager(shortcut: shortcut) { [weak self] in
             self?.captureAndAsk()
         }
+        settingsWindow.onShortcutChange = { [weak self] newShortcut in
+            self?.hotkeyManager.register(newShortcut)
+            self?.updateCaptureItem(newShortcut)
+        }
+
+        // First launch (or key removed): open Settings so the user learns
+        // the shortcut and sets a key.
+        if GeminiClient.resolveAPIKey() == nil {
+            settingsWindow.show()
+        }
+    }
+
+    /// Menu-bar apps built programmatically have no main menu, so ⌘V/⌘C/⌘X/⌘A
+    /// never reach text fields (e.g. pasting the API key). Install a standard
+    /// Edit menu to route them.
+    private func installEditMenu() {
+        let mainMenu = NSMenu()
+        let editItem = NSMenuItem()
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editItem.submenu = editMenu
+        mainMenu.addItem(editItem)
+        NSApp.mainMenu = mainMenu
+    }
+
+    private func updateCaptureItem(_ shortcut: Shortcut) {
+        captureItem.keyEquivalent = shortcut.keyEquivalentString
+        captureItem.keyEquivalentModifierMask = shortcut.cocoaModifierFlags
     }
 
     @objc func openSettings() {
