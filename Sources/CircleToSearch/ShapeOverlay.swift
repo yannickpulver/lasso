@@ -182,25 +182,22 @@ private final class DrawView: NSView {
         emitter.renderMode = .additive
         emitter.birthRate = 0
 
-        let colors: [NSColor] = [.white, .systemYellow, .systemTeal, .systemPurple]
-        emitter.emitterCells = colors.map { color in
-            let cell = CAEmitterCell()
-            cell.contents = sparkleImage
-            cell.birthRate = 25
-            cell.lifetime = 0.7
-            cell.lifetimeRange = 0.3
-            cell.velocity = 35
-            cell.velocityRange = 25
-            cell.emissionRange = .pi * 2
-            cell.scale = 0.55
-            cell.scaleRange = 0.35
-            cell.scaleSpeed = -0.8
-            cell.alphaSpeed = -1.4
-            cell.spin = 3
-            cell.spinRange = 6
-            cell.color = color.cgColor
-            return cell
-        }
+        let cell = CAEmitterCell()
+        cell.contents = sparkleImage
+        cell.birthRate = 90
+        cell.lifetime = 0.7
+        cell.lifetimeRange = 0.3
+        cell.velocity = 35
+        cell.velocityRange = 25
+        cell.emissionRange = .pi * 2
+        cell.scale = 0.55
+        cell.scaleRange = 0.35
+        cell.scaleSpeed = -0.8
+        cell.alphaSpeed = -1.4
+        cell.spin = 3
+        cell.spinRange = 6
+        cell.color = NSColor.white.cgColor
+        emitter.emitterCells = [cell]
         return emitter
     }
 }

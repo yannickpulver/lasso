@@ -2,102 +2,189 @@ import AppKit
 
 @MainActor
 final class ResultPanel: NSObject {
-    private static let panelWidth: CGFloat = 460
-    private static let panelHeight: CGFloat = 400
+    private static let cardWidth: CGFloat = 420
 
     private var panel: NSPanel?
     private var action: (() -> Void)?
+    private var clickMonitor: Any?
+    private var keyMonitor: Any?
 
     private final class LinkButton: NSButton {
         var url: URL?
     }
 
+    private final class CardPanel: NSPanel {
+        override var canBecomeKey: Bool { true }
+    }
+
     // MARK: - Public API
 
     func showLoading() {
-        present(makeTextContent(text: "✨ Thinking…", actionTitle: nil))
+        present(makeMessageContent(text: "✨ Thinking…"))
     }
 
     func showText(_ text: String, actionTitle: String? = nil, action: (() -> Void)? = nil) {
         self.action = action
-        present(makeTextContent(text: text, actionTitle: actionTitle))
+        present(makeMessageContent(text: text, actionTitle: actionTitle))
     }
 
     func showAnswer(_ answer: Answer, thumbnail: NSImage?) {
         present(makeAnswerContent(answer: answer, thumbnail: thumbnail))
     }
 
-    // MARK: - Panel
+    func dismiss() {
+        if let clickMonitor { NSEvent.removeMonitor(clickMonitor) }
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        clickMonitor = nil
+        keyMonitor = nil
+        panel?.close()
+        panel = nil
+    }
 
-    private func present(_ content: NSView) {
-        // Reuse the existing panel's position (loading → answer transition);
-        // otherwise open near the mouse.
-        let size = NSSize(width: Self.panelWidth, height: Self.panelHeight)
+    // MARK: - Card presentation
+
+    private func present(_ stack: NSStackView) {
+        let previousFrame = (panel?.isVisible == true) ? panel?.frame : nil
+        dismiss()
+
+        // Frosted-glass card
+        let card = NSVisualEffectView()
+        card.material = .hudWindow
+        card.blendingMode = .behindWindow
+        card.state = .active
+        card.wantsLayer = true
+        card.layer?.cornerRadius = 18
+        card.layer?.masksToBounds = true
+        card.layer?.borderWidth = 1
+        card.layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
+
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: card.topAnchor),
+            stack.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: card.bottomAnchor),
+            stack.widthAnchor.constraint(equalToConstant: Self.cardWidth),
+        ])
+
+        let height = card.fittingSize.height
+        let size = NSSize(width: Self.cardWidth, height: height)
+
+        // Keep the top edge anchored on loading → answer transitions
         let origin: NSPoint
-        if let existing = panel, existing.isVisible {
-            origin = existing.frame.origin
-            existing.close()
+        if let previousFrame {
+            origin = NSPoint(x: previousFrame.origin.x, y: previousFrame.maxY - height)
         } else {
             let mouse = NSEvent.mouseLocation
-            origin = NSPoint(x: mouse.x - size.width / 2, y: mouse.y - size.height - 20)
+            origin = NSPoint(x: mouse.x - size.width / 2, y: mouse.y - size.height - 24)
         }
 
-        let panel = NSPanel(
+        let panel = CardPanel(
             contentRect: NSRect(origin: origin, size: size),
-            styleMask: [.titled, .closable, .nonactivatingPanel, .utilityWindow],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        panel.title = "Circle to Search"
         panel.level = .floating
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.hasShadow = true
+        panel.isMovableByWindowBackground = true
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
+        panel.contentView = card
 
-        content.frame = NSRect(origin: .zero, size: size)
-        content.autoresizingMask = [.width, .height]
-        panel.contentView = content
+        panel.alphaValue = 0
         panel.makeKeyAndOrderFront(nil)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            panel.animator().alphaValue = 1
+        }
         self.panel = panel
+
+        // Click anywhere outside (other apps) or press Esc to dismiss
+        clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            Task { @MainActor in self?.dismiss() }
+        }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if event.keyCode == 53 { // Esc
+                Task { @MainActor in self?.dismiss() }
+                return nil
+            }
+            return event
+        }
     }
 
-    // MARK: - Answer layout
+    // MARK: - Content builders
 
-    private func makeAnswerContent(answer: Answer, thumbnail: NSImage?) -> NSView {
+    private func baseStack() -> NSStackView {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 10
-        stack.edgeInsets = NSEdgeInsets(top: 14, left: 16, bottom: 14, right: 16)
+        stack.edgeInsets = NSEdgeInsets(top: 18, left: 20, bottom: 18, right: 20)
+        return stack
+    }
 
-        if let thumbnail {
+    private func makeMessageContent(text: String, actionTitle: String? = nil) -> NSStackView {
+        let stack = baseStack()
+
+        let label = NSTextField(wrappingLabelWithString: text)
+        label.font = .systemFont(ofSize: 13)
+        label.textColor = .labelColor
+        label.isSelectable = true
+        stack.addArrangedSubview(label)
+
+        if let actionTitle {
+            let button = NSButton(title: actionTitle, target: self, action: #selector(runAction))
+            button.bezelStyle = .rounded
+            button.controlSize = .regular
+            stack.addArrangedSubview(button)
+        }
+        return stack
+    }
+
+    private func makeAnswerContent(answer: Answer, thumbnail: NSImage?) -> NSStackView {
+        let stack = baseStack()
+        let contentWidth = Self.cardWidth - stack.edgeInsets.left - stack.edgeInsets.right
+
+        if let thumbnail, thumbnail.size.width > 0 {
+            let aspect = thumbnail.size.height / thumbnail.size.width
+            let height = min(contentWidth * aspect, 130)
             let imageView = NSImageView(image: thumbnail)
-            imageView.imageScaling = .scaleProportionallyDown
+            imageView.imageScaling = .scaleProportionallyUpOrDown
             imageView.wantsLayer = true
-            imageView.layer?.cornerRadius = 10
+            imageView.layer?.cornerRadius = 12
             imageView.layer?.masksToBounds = true
             imageView.translatesAutoresizingMaskIntoConstraints = false
-            imageView.heightAnchor.constraint(lessThanOrEqualToConstant: 110).isActive = true
+            NSLayoutConstraint.activate([
+                imageView.widthAnchor.constraint(equalToConstant: contentWidth),
+                imageView.heightAnchor.constraint(equalToConstant: height),
+            ])
             stack.addArrangedSubview(imageView)
         }
 
         let title = NSTextField(wrappingLabelWithString: answer.title)
-        title.font = .boldSystemFont(ofSize: 15)
+        title.font = .systemFont(ofSize: 16, weight: .semibold)
+        title.textColor = .labelColor
+        title.isSelectable = true
         stack.addArrangedSubview(title)
 
         if !answer.body.isEmpty {
             let body = NSTextField(wrappingLabelWithString: answer.body)
             body.font = .systemFont(ofSize: 13)
+            body.textColor = .secondaryLabelColor
+            body.isSelectable = true
             stack.addArrangedSubview(body)
         }
 
         var chips: [NSView] = []
         if let address = answer.address, let url = mapsURL(for: address) {
-            let maps = makeChip(title: "📍 Open in Maps", url: url)
-            maps.keyEquivalent = "\r" // Enter opens Maps
-            chips.append(maps)
+            chips.append(makeChip(title: "📍 Open in Maps", url: url))
         }
         for source in answer.sources.prefix(3) {
-            let chip = makeChip(title: "🔗 " + shortTitle(source.title), url: source.url)
+            let chip = makeChip(title: shortTitle(source.title), url: source.url)
             loadFavicon(for: source, into: chip)
             chips.append(chip)
         }
@@ -105,20 +192,13 @@ final class ResultPanel: NSObject {
             let row = NSStackView(views: chips)
             row.orientation = .horizontal
             row.spacing = 8
+            stack.setCustomSpacing(14, after: stack.arrangedSubviews.last!)
             stack.addArrangedSubview(row)
         }
-
-        let container = NSView()
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: container.topAnchor),
-            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            stack.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor),
-        ])
-        return container
+        return stack
     }
+
+    // MARK: - Chips
 
     private func makeChip(title: String, url: URL) -> LinkButton {
         let button = LinkButton(title: title, target: self, action: #selector(openLink(_:)))
@@ -156,49 +236,15 @@ final class ResultPanel: NSObject {
                 image.size = NSSize(width: 14, height: 14)
                 button.image = image
                 button.imagePosition = .imageLeading
-                button.title = button.title.replacingOccurrences(of: "🔗 ", with: "")
             }
         }.resume()
     }
 
+    // MARK: - Actions
+
     @objc private func openLink(_ sender: NSButton) {
         guard let url = (sender as? LinkButton)?.url else { return }
         NSWorkspace.shared.open(url)
-    }
-
-    // MARK: - Plain text layout (loading / errors)
-
-    private func makeTextContent(text: String, actionTitle: String?) -> NSView {
-        let size = NSSize(width: Self.panelWidth, height: Self.panelHeight)
-        let container = NSView(frame: NSRect(origin: .zero, size: size))
-
-        let scrollView = NSTextView.scrollableTextView()
-        let textView = scrollView.documentView as! NSTextView
-        textView.string = text
-        textView.font = .systemFont(ofSize: 13)
-        textView.textContainerInset = NSSize(width: 12, height: 12)
-        textView.isEditable = true
-        textView.isAutomaticLinkDetectionEnabled = true
-        textView.checkTextInDocument(nil)
-        textView.isEditable = false
-
-        let buttonArea: CGFloat = actionTitle != nil ? 48 : 0
-        scrollView.frame = NSRect(x: 0, y: buttonArea, width: size.width, height: size.height - buttonArea)
-        scrollView.autoresizingMask = [.width, .height]
-        container.addSubview(scrollView)
-
-        if let actionTitle {
-            let button = NSButton(title: actionTitle, target: self, action: #selector(runAction))
-            button.bezelStyle = .rounded
-            button.sizeToFit()
-            button.setFrameOrigin(NSPoint(
-                x: (size.width - button.frame.width) / 2,
-                y: (buttonArea - button.frame.height) / 2
-            ))
-            button.autoresizingMask = [.minXMargin, .maxXMargin, .maxYMargin]
-            container.addSubview(button)
-        }
-        return container
     }
 
     @objc private func runAction() {
