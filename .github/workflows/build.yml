@@ -31,6 +31,7 @@ jobs:
         run: ./scripts/bundle.sh
 
       - name: Import certificate
+        if: github.ref == 'refs/heads/main'
         env:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -44,6 +45,7 @@ jobs:
           rm certificate.p12
 
       - name: Sign app
+        if: github.ref == 'refs/heads/main'
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
@@ -53,9 +55,11 @@ jobs:
           codesign --verify --deep --strict "dist/Lasso.app"
 
       - name: Zip app bundle
+        if: github.ref == 'refs/heads/main'
         run: ditto -c -k --keepParent "dist/Lasso.app" "dist/Lasso.zip"
 
       - name: Notarize app
+        if: github.ref == 'refs/heads/main'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -82,9 +86,11 @@ jobs:
           fi
 
       - name: Staple app
+        if: github.ref == 'refs/heads/main'
         run: xcrun stapler staple "dist/Lasso.app"
 
       - name: Re-zip after stapling
+        if: github.ref == 'refs/heads/main'
         run: |
           rm dist/Lasso.zip
           ditto -c -k --keepParent "dist/Lasso.app" "dist/Lasso.zip"
