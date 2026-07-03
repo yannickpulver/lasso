@@ -49,7 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await resultPanel.showLoading()
                 do {
                     let env = ProcessInfo.processInfo.environment
-                    let answer: String
+                    let answer: Answer
                     if env["GEMINI_API_KEY"]?.isEmpty == false {
                         answer = try await GeminiClient.ask(imageData: imageData)
                     } else if env["ANTHROPIC_API_KEY"]?.isEmpty == false {
@@ -57,7 +57,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     } else {
                         answer = try await ClaudeCodeClient.ask(imageData: imageData)
                     }
-                    await resultPanel.showText(answer)
+                    let thumbnail = NSImage(data: imageData)
+                    await resultPanel.showAnswer(answer, thumbnail: thumbnail)
                 } catch {
                     await resultPanel.showText("Error: \(error.localizedDescription)")
                 }

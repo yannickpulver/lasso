@@ -26,7 +26,7 @@ enum ClaudeCodeClient {
 
     static var isAvailable: Bool { claudePath != nil }
 
-    static func ask(imageData: Data) async throws -> String {
+    static func ask(imageData: Data) async throws -> Answer {
         guard let claudePath else {
             throw ClaudeError.apiError("claude CLI not found. Install Claude Code or set ANTHROPIC_API_KEY.")
         }
@@ -66,6 +66,6 @@ enum ClaudeCodeClient {
         let text = String(data: outData, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !text.isEmpty else { throw ClaudeError.badResponse }
-        return text
+        return Answer.parse(text: text)
     }
 }

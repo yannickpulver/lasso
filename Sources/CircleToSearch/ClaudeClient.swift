@@ -41,7 +41,7 @@ public enum ClaudeClient {
         ]
     }
 
-    public static func ask(imageData: Data) async throws -> String {
+    public static func ask(imageData: Data) async throws -> Answer {
         guard let apiKey = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"],
               !apiKey.isEmpty else {
             throw ClaudeError.missingAPIKey
@@ -74,6 +74,6 @@ public enum ClaudeClient {
             .compactMap { $0["text"] as? String }
             .joined(separator: "\n")
         guard !text.isEmpty else { throw ClaudeError.badResponse }
-        return text
+        return Answer.parse(text: text)
     }
 }

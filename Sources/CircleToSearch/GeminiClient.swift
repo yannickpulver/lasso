@@ -30,7 +30,7 @@ public enum GeminiClient {
         ]
     }
 
-    public static func ask(imageData: Data) async throws -> String {
+    public static func ask(imageData: Data) async throws -> Answer {
         guard let apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"],
               !apiKey.isEmpty else {
             throw ClaudeError.apiError("GEMINI_API_KEY is not set.")
@@ -63,25 +63,24 @@ public enum GeminiClient {
               let parts = content["parts"] as? [[String: Any]] else {
             throw ClaudeError.badResponse
         }
-        var text = parts
+        let text = parts
             .compactMap { $0["text"] as? String }
             .joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw ClaudeError.badResponse }
 
-        // Append grounding sources (web search results Gemini used)
+        // Grounding sources (web search results Gemini used)
+        var sources: [Answer.Source] = []
         if let grounding = candidates.first?["groundingMetadata"] as? [String: Any],
            let chunks = grounding["groundingChunks"] as? [[String: Any]] {
-            let sources = chunks.prefix(4).compactMap { chunk -> String? in
+            sources = chunks.compactMap { chunk in
                 guard let web = chunk["web"] as? [String: Any],
-                      let uri = web["uri"] as? String else { return nil }
+                      let uri = web["uri"] as? String,
+                      let url = URL(string: uri) else { return nil }
                 let title = (web["title"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-                return title.map { "\($0) — \(uri)" } ?? uri
-            }
-            if !sources.isEmpty {
-                text += "\n\nSources:\n" + sources.joined(separator: "\n")
+                return Answer.Source(title: title ?? url.host ?? uri, url: url)
             }
         }
-        return text
+        return Answer.parse(text: text, sources: sources)
     }
 }

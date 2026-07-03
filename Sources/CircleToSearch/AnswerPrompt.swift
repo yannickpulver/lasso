@@ -23,6 +23,10 @@ enum AnswerPrompt {
     - Foreign text: the translation, then its meaning if non-obvious
     - Person, artwork, film, game: who/what it is and why notable
     - Chart, error message, UI element: what it means and the next step
+    Start each fact line with a fitting emoji: 📍 location, ⭐ rating, 💰 price, \
+    🛍️ where to buy, 🌐 translation, ℹ️ context, ⚠️ warning.
+    If the subject has a physical location, add one final line exactly in this form \
+    (machine-parsed, no emoji): ADDRESS: <street and city>
     Keep the whole answer under 80 words. Plain text only, no markdown.
     </response_format>
 
