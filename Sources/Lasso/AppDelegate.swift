@@ -73,6 +73,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow.show()
     }
 
+    /// Points the card's follow-up chips at another Gemini round with the
+    /// same image; each answer re-installs so the user can keep digging.
+    private func installFollowUps(imageData: Data, previous: Answer) {
+        resultPanel.onFollowUp = { [weak self, resultPanel] question in
+            Task.detached {
+                await resultPanel.showLoading()
+                do {
+                    let context = previous.title + "\n" + previous.body
+                    let answer = try await GeminiClient.ask(
+                        imageData: imageData,
+                        followUp: .init(question: question, previousAnswer: context)
+                    )
+                    await MainActor.run {
+                        self?.installFollowUps(imageData: imageData, previous: answer)
+                    }
+                    await resultPanel.showAnswer(answer, thumbnail: NSImage(data: imageData))
+                } catch {
+                    await resultPanel.showText("Error: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
     @objc func captureAndAsk() {
         overlay.begin { [weak self, resultPanel] rect in
             guard let rect else { return }
@@ -95,6 +118,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 do {
                     let answer = try await GeminiClient.ask(imageData: imageData)
                     let thumbnail = NSImage(data: imageData)
+                    await MainActor.run {
+                        self?.installFollowUps(imageData: imageData, previous: answer)
+                    }
                     await resultPanel.showAnswer(answer, thumbnail: thumbnail)
                 } catch LassoError.missingAPIKey {
                     await resultPanel.showText(

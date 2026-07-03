@@ -48,10 +48,23 @@ public enum GeminiClient {
         ]
     }
 
-    public static func ask(imageData: Data) async throws -> Answer {
+    public struct FollowUp {
+        public let question: String
+        public let previousAnswer: String
+
+        public init(question: String, previousAnswer: String) {
+            self.question = question
+            self.previousAnswer = previousAnswer
+        }
+    }
+
+    public static func ask(imageData: Data, followUp: FollowUp? = nil) async throws -> Answer {
         guard let apiKey = resolveAPIKey() else {
             throw LassoError.missingAPIKey
         }
+        let prompt = followUp.map {
+            AnswerPrompt.followUp(question: $0.question, previousAnswer: $0.previousAnswer)
+        } ?? defaultPrompt
 
         var request = URLRequest(url: URL(
             string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent"
@@ -61,7 +74,7 @@ public enum GeminiClient {
         request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         request.httpBody = try JSONSerialization.data(
-            withJSONObject: buildRequestBody(imageData: imageData, prompt: defaultPrompt)
+            withJSONObject: buildRequestBody(imageData: imageData, prompt: prompt)
         )
 
         let (data, response) = try await URLSession.shared.data(for: request)

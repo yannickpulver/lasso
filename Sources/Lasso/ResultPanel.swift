@@ -13,6 +13,13 @@ final class ResultPanel: NSObject {
         var url: URL?
     }
 
+    private final class FollowUpButton: NSButton {
+        var question: String?
+    }
+
+    /// Called when the user taps a suggested follow-up question.
+    var onFollowUp: ((String) -> Void)?
+
     private final class CardPanel: NSPanel {
         override var canBecomeKey: Bool { true }
     }
@@ -199,7 +206,8 @@ final class ResultPanel: NSObject {
         if let address = answer.address, let url = mapsURL(for: address) {
             chips.append(makeChip(title: "📍 Open in Maps", url: url))
         }
-        for source in answer.sources.prefix(3) {
+        chips.append(contentsOf: actionChips(for: answer))
+        for source in answer.sources.prefix(2) {
             let chip = makeChip(title: shortTitle(source.title), url: source.url)
             loadFavicon(for: source, into: chip)
             chips.append(chip)
@@ -211,7 +219,53 @@ final class ResultPanel: NSObject {
             stack.setCustomSpacing(14, after: stack.arrangedSubviews.last!)
             stack.addArrangedSubview(row)
         }
+
+        let followUps = answer.followUps.prefix(3)
+        if !followUps.isEmpty, onFollowUp != nil {
+            let column = NSStackView()
+            column.orientation = .vertical
+            column.alignment = .leading
+            column.spacing = 4
+            for question in followUps {
+                let button = FollowUpButton(
+                    title: "✨ \(question)",
+                    target: self,
+                    action: #selector(askFollowUp(_:))
+                )
+                button.question = question
+                button.isBordered = false
+                button.contentTintColor = .secondaryLabelColor
+                button.font = .systemFont(ofSize: 12)
+                column.addArrangedSubview(button)
+            }
+            stack.setCustomSpacing(12, after: stack.arrangedSubviews.last!)
+            stack.addArrangedSubview(column)
+        }
         return stack
+    }
+
+    /// Deterministic quick actions derived from the answer's subject kind.
+    private func actionChips(for answer: Answer) -> [NSView] {
+        guard let query = answer.entityName
+            .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return [] }
+        switch answer.kind {
+        case .place:
+            guard let destination = (answer.address ?? answer.entityName)
+                .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                  let url = URL(string: "https://maps.apple.com/?daddr=\(destination)") else { return [] }
+            return [makeChip(title: "🗺 Directions", url: url)]
+        case .product:
+            var chips: [NSView] = []
+            if let nearby = URL(string: "https://maps.apple.com/?q=\(query)") {
+                chips.append(makeChip(title: "🛒 Find nearby", url: nearby))
+            }
+            if let shop = URL(string: "https://www.google.com/search?tbm=shop&q=\(query)") {
+                chips.append(makeChip(title: "💰 Compare prices", url: shop))
+            }
+            return chips
+        case .other:
+            return []
+        }
     }
 
     // MARK: - Chips
@@ -265,5 +319,10 @@ final class ResultPanel: NSObject {
 
     @objc private func runAction() {
         action?()
+    }
+
+    @objc private func askFollowUp(_ sender: NSButton) {
+        guard let question = (sender as? FollowUpButton)?.question else { return }
+        onFollowUp?(question)
     }
 }
