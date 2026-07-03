@@ -1,5 +1,5 @@
 import XCTest
-@testable import CircleToSearch
+@testable import Lasso
 
 final class ShapeMathTests: XCTestCase {
     let bounds = CGRect(x: 0, y: 0, width: 1000, height: 800)

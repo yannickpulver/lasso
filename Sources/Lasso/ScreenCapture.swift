@@ -5,7 +5,7 @@ enum ScreenCapture {
     /// via the native screencapture CLI. Returns PNG data or nil.
     static func capture(rect: CGRect) -> Data? {
         let fileURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("circle-to-search-\(UUID().uuidString).png")
+            .appendingPathComponent("lasso-\(UUID().uuidString).png")
         defer { try? FileManager.default.removeItem(at: fileURL) }
 
         let region = "\(Int(rect.minX)),\(Int(rect.minY)),\(Int(rect.width)),\(Int(rect.height))"

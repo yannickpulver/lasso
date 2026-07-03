@@ -2,10 +2,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "CircleToSearch",
+    name: "Lasso",
     platforms: [.macOS(.v13)],
     targets: [
-        .executableTarget(name: "CircleToSearch", path: "Sources/CircleToSearch"),
-        .testTarget(name: "CircleToSearchTests", dependencies: ["CircleToSearch"], path: "Tests/CircleToSearchTests"),
+        .executableTarget(name: "Lasso", path: "Sources/Lasso"),
+        .testTarget(name: "LassoTests", dependencies: ["Lasso"], path: "Tests/LassoTests"),
     ]
 )

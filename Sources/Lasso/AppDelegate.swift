@@ -11,11 +11,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.image = NSImage(
             systemSymbolName: "circle.dashed.inset.filled",
-            accessibilityDescription: "Circle to Search"
+            accessibilityDescription: "Lasso"
         )
 
         let menu = NSMenu()
-        let captureItem = NSMenuItem(title: "Circle & Ask", action: #selector(captureAndAsk), keyEquivalent: "x")
+        let captureItem = NSMenuItem(title: "Lasso & Ask", action: #selector(captureAndAsk), keyEquivalent: "x")
         captureItem.keyEquivalentModifierMask = [.control, .option]
         captureItem.target = self
         menu.addItem(captureItem)

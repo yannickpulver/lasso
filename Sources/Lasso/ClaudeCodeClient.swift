@@ -34,7 +34,7 @@ enum ClaudeCodeClient {
         // Run claude with cwd set to a temp dir containing the screenshot so
         // the Read tool can access it without permission prompts.
         let workDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("circle-to-search-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("lasso-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: workDir) }
         try imageData.write(to: workDir.appendingPathComponent("capture.png"))

@@ -1,5 +1,5 @@
 import XCTest
-@testable import CircleToSearch
+@testable import Lasso
 
 final class ClaudeClientTests: XCTestCase {
     func testBuildRequestBodyContainsImageAndPrompt() throws {
