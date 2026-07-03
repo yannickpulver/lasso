@@ -5,7 +5,7 @@ final class HotkeyManager {
     private var hotKeyRef: EventHotKeyRef?
     private static var handler: (() -> Void)?
 
-    /// Registers ⌥⌘Space as a global hotkey.
+    /// Registers ⌃⌥X as a global hotkey.
     init(handler: @escaping () -> Void) {
         HotkeyManager.handler = handler
 
@@ -24,8 +24,8 @@ final class HotkeyManager {
 
         let hotKeyID = EventHotKeyID(signature: OSType(0x4354_5321), id: 1) // "CTS!"
         RegisterEventHotKey(
-            UInt32(kVK_Space),            // 49
-            UInt32(optionKey | cmdKey),   // ⌥⌘
+            UInt32(kVK_ANSI_X),               // 7
+            UInt32(controlKey | optionKey),   // ⌃⌥
             hotKeyID,
             GetApplicationEventTarget(),
             0,

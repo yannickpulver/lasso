@@ -16,7 +16,7 @@ A minimal macOS menu-bar app: press a global hotkey, draw a circle (or any freef
 ## User flow
 
 1. App runs in menu bar (icon, Quit item)
-2. User presses **⌥⌘Space** (global hotkey)
+2. User presses **⌃⌥X** (global hotkey)
 3. A dimmed transparent overlay covers the screen under the mouse; cursor becomes a crosshair
 4. User draws a freeform shape (circle, lasso, scribble) with the mouse; the stroke renders live
 5. On mouse-up, the overlay disappears; the shape's bounding box (+8px padding) is screenshotted via `screencapture -x -R`
@@ -31,7 +31,7 @@ Single Swift Package executable (`swift build`/`swift run`), AppKit, no Xcode pr
 | Component | Responsibility |
 |---|---|
 | `main.swift` / `AppDelegate` | NSStatusItem menu bar setup, accessory activation policy, wiring |
-| `HotkeyManager` | Global hotkey ⌥⌘Space via Carbon `RegisterEventHotKey` |
+| `HotkeyManager` | Global hotkey ⌃⌥X via Carbon `RegisterEventHotKey` |
 | `ShapeOverlay` + `DrawView` | Borderless transparent window over the current screen; collects the mouse-drag path, strokes it live, computes bounding box, converts to top-left global coords for `screencapture -R` |
 | `ScreenCapture` | Runs `screencapture -x -R x,y,w,h <tmpfile>`, returns PNG data |
 | `ClaudeClient` | Raw HTTP `URLSession` POST to `api.anthropic.com/v1/messages` (no official Swift SDK). Model `claude-opus-4-8`, base64 PNG image block + text prompt, `max_tokens` 1024. API key from `ANTHROPIC_API_KEY` env var. |
@@ -40,7 +40,7 @@ Single Swift Package executable (`swift build`/`swift run`), AppKit, no Xcode pr
 ## Key decisions
 
 - **Custom draw overlay, capture bounding box** — the user gets the "circle anything" gesture; the capture itself is the shape's bounding rect + padding (masking to the exact path adds complexity with no answer-quality gain for a prototype).
-- **⌥⌘Space hotkey** — user's choice; no common system/browser shortcut conflicts.
+- **⌃⌥X hotkey** — user's choice; no common system/browser shortcut conflicts.
 - **`screencapture -R` for the actual pixels** — still requires Screen Recording permission once, but avoids ScreenCaptureKit boilerplate. Coordinates must be flipped from AppKit bottom-left to top-left origin.
 - **Claude vision as the "search"** — answers directly instead of opening a browser. Model is one constant; swap to `claude-haiku-4-5` to cut cost.
 - **Raw HTTP** — Swift has no official Anthropic SDK; a single URLSession call is fine.
@@ -54,7 +54,7 @@ Single Swift Package executable (`swift build`/`swift run`), AppKit, no Xcode pr
 
 ## Testing
 
-Unit tests for the two pure functions: the API request-body builder and the bounding-box computation (points → padded, clamped rect). Everything else manual end-to-end (`swift run`, ⌥⌘Space, draw, answer appears).
+Unit tests for the two pure functions: the API request-body builder and the bounding-box computation (points → padded, clamped rect). Everything else manual end-to-end (`swift run`, ⌃⌥X, draw, answer appears).
 
 ## Open questions for user
 

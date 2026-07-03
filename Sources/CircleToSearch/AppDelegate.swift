@@ -15,8 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         let menu = NSMenu()
-        let captureItem = NSMenuItem(title: "Circle & Ask", action: #selector(captureAndAsk), keyEquivalent: " ")
-        captureItem.keyEquivalentModifierMask = [.option, .command]
+        let captureItem = NSMenuItem(title: "Circle & Ask", action: #selector(captureAndAsk), keyEquivalent: "x")
+        captureItem.keyEquivalentModifierMask = [.control, .option]
         captureItem.target = self
         menu.addItem(captureItem)
         menu.addItem(.separator())
