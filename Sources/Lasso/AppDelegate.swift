@@ -9,10 +9,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(
-            systemSymbolName: "circle.dashed.inset.filled",
-            accessibilityDescription: "Lasso"
-        )
+        statusItem.button?.image =
+            NSImage(systemSymbolName: "lasso.badge.sparkles", accessibilityDescription: "Lasso")
+            ?? NSImage(systemSymbolName: "lasso", accessibilityDescription: "Lasso")
 
         let menu = NSMenu()
         let captureItem = NSMenuItem(title: "Lasso & Ask", action: #selector(captureAndAsk), keyEquivalent: "x")
