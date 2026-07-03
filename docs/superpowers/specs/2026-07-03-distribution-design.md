@@ -39,7 +39,8 @@ with the Gemini API key entered in a settings screen instead of an env var.
   - `Contents/Resources/icon.icns`: simple generated icon (lasso + sparkle),
     produced once and committed.
 - Side effect: Screen Recording permission attaches to Lasso.app, not the terminal.
-- `entitlements.plist` for hardened runtime (no sandbox; needs screen capture).
+- Hardened runtime via `codesign --options runtime`; no entitlements file needed
+  (unsandboxed Swift binary — screen capture and network need none).
 
 ### 4. CI/CD (cloned from raw-viewer)
 
@@ -47,8 +48,8 @@ with the Gemini API key entered in a settings screen instead of an env var.
 
 1. `swift build -c release --arch arm64 --arch x86_64` (universal)
 2. `scripts/bundle.sh` → `dist/Lasso.app`
-3. Import Developer ID cert, `codesign --force --options runtime
-   --entitlements entitlements.plist` on the single binary + app bundle
+3. Import Developer ID cert, `codesign --force --options runtime`
+   on the single binary + app bundle
 4. `ditto` zip → `notarytool submit --wait` → `stapler staple` → re-zip
 5. GitHub Release `v<VERSION>` with `Lasso.zip`
 6. Reuse `update-homebrew-tap.yml` pattern to bump
