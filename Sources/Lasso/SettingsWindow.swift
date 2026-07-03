@@ -43,9 +43,45 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Press \(shortcut.displayString) to lasso anything on screen.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Image(systemName: "lasso.badge.sparkles")
+                    .font(.system(size: 26, weight: .medium))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.orange, .pink],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        )
+                    )
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Lasso anything on screen")
+                        .font(.headline)
+                    HStack(spacing: 5) {
+                        Text("Press")
+                        Text(shortcut.displayString)
+                            .font(.system(.callout, design: .rounded).weight(.semibold))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(
+                                RoundedRectangle(cornerRadius: 5)
+                                    .fill(.quaternary.opacity(0.6))
+                            )
+                        Text("and draw around it.")
+                    }
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.orange.opacity(0.12), Color.pink.opacity(0.12)],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        )
+                    )
+            )
 
             GroupBox("Gemini API Key") {
                 VStack(alignment: .leading, spacing: 6) {
