@@ -5,6 +5,14 @@ public enum GeminiClient {
     public static let model = "gemini-3.5-flash"
     static let defaultPrompt = AnswerPrompt.text
 
+    static func resolveAPIKey(
+        env: [String: String] = ProcessInfo.processInfo.environment
+    ) -> String? {
+        if let key = KeyStore.read(), !key.isEmpty { return key }
+        if let key = env["GEMINI_API_KEY"], !key.isEmpty { return key }
+        return nil
+    }
+
     public static func buildRequestBody(imageData: Data, prompt: String) -> [String: Any] {
         [
             "contents": [
@@ -31,9 +39,8 @@ public enum GeminiClient {
     }
 
     public static func ask(imageData: Data) async throws -> Answer {
-        guard let apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"],
-              !apiKey.isEmpty else {
-            throw LassoError.apiError("GEMINI_API_KEY is not set.")
+        guard let apiKey = resolveAPIKey() else {
+            throw LassoError.missingAPIKey
         }
 
         var request = URLRequest(url: URL(

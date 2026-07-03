@@ -29,4 +29,25 @@ final class GeminiClientTests: XCTestCase {
         XCTAssertEqual(GeminiClient.model, "gemini-3.5-flash")
         XCTAssertNoThrow(try JSONSerialization.data(withJSONObject: body))
     }
+
+    func testResolveAPIKeyPrefersKeychain() throws {
+        KeyStore.service = "com.yannickpulver.lasso.tests"
+        defer { KeyStore.delete(); KeyStore.service = "com.yannickpulver.lasso" }
+        try KeyStore.save("keychain-key")
+        XCTAssertEqual(GeminiClient.resolveAPIKey(env: ["GEMINI_API_KEY": "env-key"]), "keychain-key")
+    }
+
+    func testResolveAPIKeyFallsBackToEnv() {
+        KeyStore.service = "com.yannickpulver.lasso.tests"
+        defer { KeyStore.service = "com.yannickpulver.lasso" }
+        KeyStore.delete()
+        XCTAssertEqual(GeminiClient.resolveAPIKey(env: ["GEMINI_API_KEY": "env-key"]), "env-key")
+    }
+
+    func testResolveAPIKeyNilWhenNothingSet() {
+        KeyStore.service = "com.yannickpulver.lasso.tests"
+        defer { KeyStore.service = "com.yannickpulver.lasso" }
+        KeyStore.delete()
+        XCTAssertNil(GeminiClient.resolveAPIKey(env: [:]))
+    }
 }
