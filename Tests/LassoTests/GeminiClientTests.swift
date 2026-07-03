@@ -44,6 +44,13 @@ final class GeminiClientTests: XCTestCase {
         XCTAssertEqual(GeminiClient.resolveAPIKey(env: ["GEMINI_API_KEY": "env-key"]), "env-key")
     }
 
+    func testResolveAPIKeyTreatsEmptyEnvAsAbsent() {
+        KeyStore.service = "com.yannickpulver.lasso.tests"
+        defer { KeyStore.service = "com.yannickpulver.lasso" }
+        KeyStore.delete()
+        XCTAssertNil(GeminiClient.resolveAPIKey(env: ["GEMINI_API_KEY": ""]))
+    }
+
     func testResolveAPIKeyNilWhenNothingSet() {
         KeyStore.service = "com.yannickpulver.lasso.tests"
         defer { KeyStore.service = "com.yannickpulver.lasso" }
