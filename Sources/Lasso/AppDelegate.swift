@@ -47,15 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 await resultPanel.showLoading()
                 do {
-                    let env = ProcessInfo.processInfo.environment
-                    let answer: Answer
-                    if env["GEMINI_API_KEY"]?.isEmpty == false {
-                        answer = try await GeminiClient.ask(imageData: imageData)
-                    } else if env["ANTHROPIC_API_KEY"]?.isEmpty == false {
-                        answer = try await ClaudeClient.ask(imageData: imageData)
-                    } else {
-                        answer = try await ClaudeCodeClient.ask(imageData: imageData)
-                    }
+                    let answer = try await GeminiClient.ask(imageData: imageData)
                     let thumbnail = NSImage(data: imageData)
                     await resultPanel.showAnswer(answer, thumbnail: thumbnail)
                 } catch {
