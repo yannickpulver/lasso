@@ -52,6 +52,11 @@ final class AnswerTests: XCTestCase {
         XCTAssertEqual(answer.kind, .other)
     }
 
+    func testParseDigitalKind() {
+        let answer = Answer.parse(text: "Lasso — macOS menu bar app\nKIND: digital")
+        XCTAssertEqual(answer.kind, .digital)
+    }
+
     func testParseDefaultsWithoutMachineLines() {
         let answer = Answer.parse(text: "Just a title")
         XCTAssertEqual(answer.kind, .other)

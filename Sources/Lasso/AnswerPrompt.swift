@@ -16,7 +16,9 @@ enum AnswerPrompt {
     🛍️ where to buy, 🌐 translation, ℹ️ context, ⚠️ warning.
     Then machine-parsed lines (no emoji), each on its own line:
     - If the subject has a physical location: ADDRESS: <street and city>
-    - Always: KIND: product | place | other
+    - Always: KIND: product | digital | place | other — product means a physical \
+    good you could buy in a store; digital means software, apps, websites, games, \
+    subscriptions, media
     - 2-3 lines: FOLLOWUP: <a short follow-up question the user would likely ask next>. \
     Make them actionable for THIS subject — e.g. a product: "Where can I buy this \
     cheapest nearby?", "Are there better alternatives?"; a place: "How do I get \

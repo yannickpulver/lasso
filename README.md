@@ -2,11 +2,11 @@
   <img src="assets/icon.png" width="128" alt="Lasso icon">
 </p>
 
-# Lasso 🤠
+# Lasso
 
-Press **⌃⌥X**, lasso anything on your screen with a glowing sparkle stroke,
-and AI tells you what and where it is — like Android's Circle to Search,
-as a macOS menu-bar app.
+**Circle to Search, for your Mac.** Press **⌃⌥X**, draw a glowing lasso around
+anything on your screen, and AI tells you what it is, where it's from, and what
+to do next.
 
 ## Install
 

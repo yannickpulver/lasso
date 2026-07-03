@@ -13,7 +13,8 @@ public struct Answer {
     }
 
     public enum Kind: String {
-        case product
+        case product // physical good
+        case digital // software, apps, websites, media
         case place
         case other
     }

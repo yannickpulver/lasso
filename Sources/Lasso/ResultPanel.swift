@@ -8,6 +8,20 @@ final class ResultPanel: NSObject {
     private var action: (() -> Void)?
     private var clickMonitor: Any?
     private var keyMonitor: Any?
+    private var loadingTimer: Timer?
+
+    private static let loadingPhrases = [
+        "🤠 Lassoing that in…",
+        "🔍 Zooming… and enhancing…",
+        "🌐 Galloping across the web…",
+        "🕵️ Following the clues…",
+        "🧠 Connecting the dots…",
+        "📚 Cross-checking the facts…",
+        "🎯 Narrowing it down…",
+        "✨ Sprinkling AI dust on it…",
+        "🗺 Asking around town…",
+        "🤔 Hmm, seen this before…",
+    ]
 
     private final class LinkButton: NSButton {
         var url: URL?
@@ -27,7 +41,36 @@ final class ResultPanel: NSObject {
     // MARK: - Public API
 
     func showLoading() {
-        present(makeMessageContent(text: "✨ Thinking…"))
+        var phrases = Self.loadingPhrases.shuffled()
+
+        let label = NSTextField(labelWithString: phrases[0])
+        label.font = .systemFont(ofSize: 14, weight: .medium)
+        label.textColor = .labelColor
+
+        let stack = baseStack()
+        stack.addArrangedSubview(label)
+        present(stack)
+
+        // Cycle through suspense phrases with a little fade until the answer
+        // (or an error) replaces the card. present()/dismiss() clear the timer.
+        var index = 0
+        loadingTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { _ in
+            Task { @MainActor in
+                index += 1
+                if index == phrases.count { phrases.shuffle(); index = 0 }
+                let phrase = phrases[index]
+                NSAnimationContext.runAnimationGroup({ context in
+                    context.duration = 0.25
+                    label.animator().alphaValue = 0
+                }) {
+                    label.stringValue = phrase
+                    NSAnimationContext.runAnimationGroup { context in
+                        context.duration = 0.25
+                        label.animator().alphaValue = 1
+                    }
+                }
+            }
+        }
     }
 
     func showText(_ text: String, actionTitle: String? = nil, action: (() -> Void)? = nil) {
@@ -44,6 +87,8 @@ final class ResultPanel: NSObject {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         clickMonitor = nil
         keyMonitor = nil
+        loadingTimer?.invalidate()
+        loadingTimer = nil
         panel?.close()
         panel = nil
     }
@@ -192,40 +237,59 @@ final class ResultPanel: NSObject {
         title.font = .systemFont(ofSize: 16, weight: .semibold)
         title.textColor = .labelColor
         title.isSelectable = true
+        if let last = stack.arrangedSubviews.last {
+            stack.setCustomSpacing(14, after: last)
+        }
         stack.addArrangedSubview(title)
+        stack.setCustomSpacing(6, after: title)
 
         if !answer.body.isEmpty {
             let body = NSTextField(wrappingLabelWithString: answer.body)
             body.font = .systemFont(ofSize: 13)
             body.textColor = .secondaryLabelColor
             body.isSelectable = true
+            // a bit of line breathing room for the emoji fact lines
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.lineSpacing = 3
+            body.attributedStringValue = NSAttributedString(
+                string: answer.body,
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 13),
+                    .foregroundColor: NSColor.secondaryLabelColor,
+                    .paragraphStyle: paragraph,
+                ]
+            )
             stack.addArrangedSubview(body)
         }
 
-        var chips: [NSView] = []
+        // Quick actions (maps, shopping) on their own row; web sources on a
+        // second row — a single row overflows the card.
+        var actions: [NSView] = []
         if let address = answer.address, let url = mapsURL(for: address) {
-            chips.append(makeChip(title: "📍 Open in Maps", url: url))
+            actions.append(makeChip(title: "📍 Open in Maps", url: url))
         }
-        chips.append(contentsOf: actionChips(for: answer))
-        for source in answer.sources.prefix(2) {
+        actions.append(contentsOf: actionChips(for: answer))
+
+        var sources: [NSView] = []
+        for source in answer.sources.prefix(3) {
             let chip = makeChip(title: shortTitle(source.title), url: source.url)
             loadFavicon(for: source, into: chip)
-            chips.append(chip)
+            sources.append(chip)
         }
-        if !chips.isEmpty {
-            let row = NSStackView(views: chips)
-            row.orientation = .horizontal
-            row.spacing = 8
-            stack.setCustomSpacing(14, after: stack.arrangedSubviews.last!)
-            stack.addArrangedSubview(row)
+
+        if !actions.isEmpty || !sources.isEmpty {
+            addSeparator(to: stack)
+            for chips in [actions, sources] where !chips.isEmpty {
+                let row = NSStackView(views: chips)
+                row.orientation = .horizontal
+                row.spacing = 8
+                stack.addArrangedSubview(row)
+            }
         }
 
         let followUps = answer.followUps.prefix(3)
         if !followUps.isEmpty, onFollowUp != nil {
-            let column = NSStackView()
-            column.orientation = .vertical
-            column.alignment = .leading
-            column.spacing = 4
+            addSeparator(to: stack)
             for question in followUps {
                 let button = FollowUpButton(
                     title: "✨ \(question)",
@@ -236,15 +300,31 @@ final class ResultPanel: NSObject {
                 button.isBordered = false
                 button.contentTintColor = .secondaryLabelColor
                 button.font = .systemFont(ofSize: 12)
-                column.addArrangedSubview(button)
+                button.alignment = .left
+                stack.addArrangedSubview(button)
+                stack.setCustomSpacing(7, after: button)
             }
-            stack.setCustomSpacing(12, after: stack.arrangedSubviews.last!)
-            stack.addArrangedSubview(column)
         }
         return stack
     }
 
+    private func addSeparator(to stack: NSStackView) {
+        let line = NSBox()
+        line.boxType = .separator
+        if let last = stack.arrangedSubviews.last {
+            stack.setCustomSpacing(12, after: last)
+        }
+        stack.addArrangedSubview(line)
+        line.translatesAutoresizingMaskIntoConstraints = false
+        line.widthAnchor.constraint(
+            equalToConstant: Self.cardWidth - stack.edgeInsets.left - stack.edgeInsets.right
+        ).isActive = true
+        stack.setCustomSpacing(12, after: line)
+    }
+
     /// Deterministic quick actions derived from the answer's subject kind.
+    /// Digital goods get none — you can't find software "nearby", and the
+    /// source links already lead to it.
     private func actionChips(for answer: Answer) -> [NSView] {
         guard let query = answer.entityName
             .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return [] }
@@ -263,7 +343,7 @@ final class ResultPanel: NSObject {
                 chips.append(makeChip(title: "💰 Compare prices", url: shop))
             }
             return chips
-        case .other:
+        case .digital, .other:
             return []
         }
     }
