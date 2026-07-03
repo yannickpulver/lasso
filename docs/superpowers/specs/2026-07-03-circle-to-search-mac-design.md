@@ -5,23 +5,24 @@ Status: Draft — pending user review
 
 ## Goal
 
-A minimal macOS menu-bar app: press a global hotkey, drag-select any region of the screen, and get an AI answer about what's in it — like Android's Circle to Search.
+A minimal macOS menu-bar app: press a global hotkey, draw a circle (or any freeform shape) around anything on screen, and get an AI answer about what's in it — like Android's Circle to Search.
 
 ## Non-goals (v1)
 
-- No "circle" gesture — rectangular drag-select is enough (native macOS crosshair)
+- No masking to the exact shape — the drawn shape's bounding box (+ padding) is captured
 - No OCR pipeline, no browser hand-off, no history, no settings UI
 - No App Store packaging / notarization
 
 ## User flow
 
 1. App runs in menu bar (icon, Quit item)
-2. User presses **⌥⌘Space** (global hotkey)
-3. Native region-selection crosshair appears (via `/usr/sbin/screencapture -i`)
-4. User drags a rectangle; screenshot saved to a temp file
-5. App sends the image to the Claude API with a fixed prompt ("Identify what's in this screenshot and explain it concisely")
-6. Floating panel appears near the mouse with the answer (spinner while loading)
-7. Esc or click-away dismisses the panel
+2. User presses **⌃Tab** (global hotkey)
+3. A dimmed transparent overlay covers the screen under the mouse; cursor becomes a crosshair
+4. User draws a freeform shape (circle, lasso, scribble) with the mouse; the stroke renders live
+5. On mouse-up, the overlay disappears; the shape's bounding box (+8px padding) is screenshotted via `screencapture -x -R`
+6. App sends the image to the Claude API with a fixed prompt ("Identify what's in this screenshot and explain it concisely")
+7. Floating panel appears near the mouse with the answer (spinner while loading)
+8. Esc during drawing cancels; tiny shapes (<10px) are ignored
 
 ## Architecture
 
@@ -29,31 +30,33 @@ Single Swift Package executable (`swift build`/`swift run`), AppKit, no Xcode pr
 
 | Component | Responsibility |
 |---|---|
-| `main.swift` / `AppDelegate` | NSStatusItem menu bar setup, `LSUIElement` behavior (no Dock icon) |
-| `HotkeyManager` | Global hotkey via Carbon `RegisterEventHotKey` (no accessibility permission needed) |
-| `ScreenCapture` | Runs `screencapture -i <tmpfile>`, returns PNG data (empty file = user cancelled) |
+| `main.swift` / `AppDelegate` | NSStatusItem menu bar setup, accessory activation policy, wiring |
+| `HotkeyManager` | Global hotkey ⌃Tab via Carbon `RegisterEventHotKey` |
+| `ShapeOverlay` + `DrawView` | Borderless transparent window over the current screen; collects the mouse-drag path, strokes it live, computes bounding box, converts to top-left global coords for `screencapture -R` |
+| `ScreenCapture` | Runs `screencapture -x -R x,y,w,h <tmpfile>`, returns PNG data |
 | `ClaudeClient` | Raw HTTP `URLSession` POST to `api.anthropic.com/v1/messages` (no official Swift SDK). Model `claude-opus-4-8`, base64 PNG image block + text prompt, `max_tokens` 1024. API key from `ANTHROPIC_API_KEY` env var. |
-| `ResultPanel` | Non-activating floating `NSPanel` with scrollable text view; loading state; Esc closes |
+| `ResultPanel` | Non-activating floating `NSPanel` with scrollable text view; loading state |
 
 ## Key decisions
 
-- **`screencapture -i` instead of custom overlay** — native region selection for free; biggest simplification. Requires Screen Recording permission granted once to the app (or Terminal when run via `swift run`).
-- **Rectangle, not circle** — gesture fidelity isn't the point of the prototype.
-- **Claude vision as the "search"** — answers directly instead of opening a browser. Model is one constant; swap to `claude-haiku-4-5` to cut cost if desired.
+- **Custom draw overlay, capture bounding box** — the user gets the "circle anything" gesture; the capture itself is the shape's bounding rect + padding (masking to the exact path adds complexity with no answer-quality gain for a prototype).
+- **⌃Tab hotkey** — user's choice. Caveat: browsers use ⌃Tab for tab switching; the global hotkey will shadow it system-wide while the app runs.
+- **`screencapture -R` for the actual pixels** — still requires Screen Recording permission once, but avoids ScreenCaptureKit boilerplate. Coordinates must be flipped from AppKit bottom-left to top-left origin.
+- **Claude vision as the "search"** — answers directly instead of opening a browser. Model is one constant; swap to `claude-haiku-4-5` to cut cost.
 - **Raw HTTP** — Swift has no official Anthropic SDK; a single URLSession call is fine.
 
 ## Error handling
 
-- Cancelled selection (empty/missing temp file) → silently do nothing
-- API error / no key → show error text in the same panel
+- Esc during drawing / shape too small → overlay closes, nothing happens
+- API error / no key → error text in the result panel
 - Non-200 → surface `error.message` from response JSON
+- Overlay dismissed ~80ms before capture so the dim/stroke never appears in the screenshot
 
 ## Testing
 
-Prototype-level: manual end-to-end run (`swift run`, hotkey, select, answer appears). Unit test only the request-body builder (pure function: image data → JSON payload).
+Unit tests for the two pure functions: the API request-body builder and the bounding-box computation (points → padded, clamped rect). Everything else manual end-to-end (`swift run`, ⌃Tab, draw, answer appears).
 
 ## Open questions for user
 
-- Hotkey preference? (default ⌥⌘Space)
-- Answer model: `claude-opus-4-8` (default, best) vs `claude-haiku-4-5` (cheap)?
-- Should the panel allow a follow-up question box? (deferred to v2 by default)
+- Multi-monitor: v1 overlays only the screen under the mouse — OK?
+- ⌃Tab shadows browser tab-switching globally — keep, or pick e.g. ⌥⌘Space / ⌃⇧Tab?

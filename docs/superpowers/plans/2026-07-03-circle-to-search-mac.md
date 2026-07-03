@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Dispatch implementation subagents on a cheaper model (sonnet) — the plan contains complete code, so no deep reasoning is needed.**
 
-**Goal:** Menu-bar macOS app: global hotkey → drag-select a screen region → Claude explains what's in it in a floating panel.
+**Goal:** Menu-bar macOS app: press ⌃Tab → draw a circle/any shape around something on screen → Claude explains what's in it in a floating panel.
 
-**Architecture:** Single SwiftPM executable (AppKit, no Xcode project). Region selection is delegated to the native `/usr/sbin/screencapture -i` CLI; the image goes to the Claude Messages API via raw `URLSession` (Swift has no official Anthropic SDK); the answer renders in a non-activating floating `NSPanel`.
+**Architecture:** Single SwiftPM executable (AppKit, no Xcode project). A transparent overlay window captures a freeform mouse-drawn path and yields its bounding box; the pixels come from `/usr/sbin/screencapture -x -R`; the image goes to the Claude Messages API via raw `URLSession` (Swift has no official Anthropic SDK); the answer renders in a non-activating floating `NSPanel`.
 
 **Tech Stack:** Swift 5.9+, AppKit, Carbon (hotkey), XCTest, Claude Messages API (`claude-opus-4-8`).
 
@@ -16,7 +16,8 @@
 - API headers exactly: `x-api-key`, `anthropic-version: 2023-06-01`, `content-type: application/json`
 - No third-party dependencies
 - App is menu-bar only: `NSApp.setActivationPolicy(.accessory)`
-- Cancelled selection (empty/missing temp file) → do nothing silently
+- Global hotkey: **⌃Tab** (`kVK_Tab` = 48, modifier `controlKey`)
+- Esc during drawing, or a shape smaller than 10×10px → do nothing silently
 
 ---
 
@@ -30,7 +31,7 @@
 
 **Interfaces:**
 - Consumes: nothing
-- Produces: `AppDelegate: NSObject, NSApplicationDelegate` with a stub method `@objc func captureAndAsk()` that later tasks fill in / call. Executable builds via `swift build`.
+- Produces: `AppDelegate: NSObject, NSApplicationDelegate` with a stub method `@objc func captureAndAsk()` that Task 6 replaces. Executable builds via `swift build`.
 
 - [ ] **Step 1: Create Package.swift**
 
@@ -48,7 +49,7 @@ let package = Package(
 )
 ```
 
-Note: for the executable to be importable by the test target, keep types `public` where marked in later tasks. (SwiftPM allows testing executable targets on modern toolchains via `@testable import CircleToSearch`.)
+Note: the test target imports the executable target via `@testable import CircleToSearch` (supported on modern toolchains).
 
 - [ ] **Step 2: Create .gitignore**
 
@@ -86,8 +87,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         let menu = NSMenu()
-        let captureItem = NSMenuItem(title: "Capture & Ask", action: #selector(captureAndAsk), keyEquivalent: " ")
-        captureItem.keyEquivalentModifierMask = [.option, .command]
+        let captureItem = NSMenuItem(title: "Circle & Ask", action: #selector(captureAndAsk), keyEquivalent: "\t")
+        captureItem.keyEquivalentModifierMask = [.control]
         captureItem.target = self
         menu.addItem(captureItem)
         menu.addItem(.separator())
@@ -96,21 +97,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func captureAndAsk() {
-        // Wired up in Task 5
+        // Wired up in Task 6
         NSLog("captureAndAsk triggered")
     }
 }
 ```
 
-- [ ] **Step 5: Build to verify**
+- [ ] **Step 5: Create empty test placeholder so the test target path exists**
+
+`Tests/CircleToSearchTests/Placeholder.swift`:
+
+```swift
+// placeholder — real tests added in Tasks 2 and 3
+```
+
+- [ ] **Step 6: Build to verify**
 
 Run: `swift build`
-Expected: `Build complete!` (test target may warn about missing Tests dir — create an empty `Tests/CircleToSearchTests/Placeholder.swift` containing `// placeholder` if the build fails on the missing path)
+Expected: `Build complete!`
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add Package.swift Sources .gitignore Tests 2>/dev/null; git add -A
+git add -A
 git commit -m "feat: SwiftPM scaffold with menu bar app skeleton"
 ```
 
@@ -261,7 +270,7 @@ public enum ClaudeClient {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `swift test`
-Expected: PASS (1 test). If the test target can't import the executable target, verify `@testable import CircleToSearch` and that types are `public`.
+Expected: PASS
 
 - [ ] **Step 5: Commit**
 
@@ -272,32 +281,293 @@ git commit -m "feat: Claude API client with tested request builder"
 
 ---
 
-### Task 3: ScreenCapture via screencapture -i
+### Task 3: Bounding-box math (TDD)
+
+**Files:**
+- Create: `Sources/CircleToSearch/ShapeMath.swift`
+- Test: `Tests/CircleToSearchTests/ShapeMathTests.swift`
+
+**Interfaces:**
+- Consumes: nothing
+- Produces: `public enum ShapeMath` with
+  `public static func boundingBox(of points: [CGPoint], padding: CGFloat, clampedTo bounds: CGRect) -> CGRect?`
+  — returns `nil` for fewer than 6 points or a resulting rect smaller than 10×10; otherwise the padded box intersected with `bounds`. Task 4's `DrawView` calls this on mouse-up.
+
+- [ ] **Step 1: Write the failing test**
+
+`Tests/CircleToSearchTests/ShapeMathTests.swift`:
+
+```swift
+import XCTest
+@testable import CircleToSearch
+
+final class ShapeMathTests: XCTestCase {
+    let bounds = CGRect(x: 0, y: 0, width: 1000, height: 800)
+
+    func testCircleOfPointsGetsPaddedBoundingBox() throws {
+        let points = [
+            CGPoint(x: 100, y: 100), CGPoint(x: 200, y: 100),
+            CGPoint(x: 200, y: 200), CGPoint(x: 100, y: 200),
+            CGPoint(x: 150, y: 250), CGPoint(x: 150, y: 90),
+        ]
+        let rect = try XCTUnwrap(ShapeMath.boundingBox(of: points, padding: 8, clampedTo: bounds))
+        XCTAssertEqual(rect, CGRect(x: 92, y: 82, width: 116, height: 176))
+    }
+
+    func testTooFewPointsReturnsNil() {
+        let points = [CGPoint(x: 1, y: 1), CGPoint(x: 2, y: 2)]
+        XCTAssertNil(ShapeMath.boundingBox(of: points, padding: 8, clampedTo: bounds))
+    }
+
+    func testTinyShapeReturnsNil() {
+        let points = (0..<10).map { CGPoint(x: 500 + CGFloat($0 % 2), y: 500 + CGFloat($0 % 3)) }
+        // ~1x2px shape — even padded it must be rejected as accidental click
+        XCTAssertNil(ShapeMath.boundingBox(of: points, padding: 0, clampedTo: bounds))
+    }
+
+    func testResultIsClampedToBounds() throws {
+        let points = [
+            CGPoint(x: 2, y: 2), CGPoint(x: 60, y: 2), CGPoint(x: 60, y: 60),
+            CGPoint(x: 2, y: 60), CGPoint(x: 30, y: 70), CGPoint(x: 30, y: 1),
+        ]
+        let rect = try XCTUnwrap(ShapeMath.boundingBox(of: points, padding: 8, clampedTo: bounds))
+        XCTAssertGreaterThanOrEqual(rect.minX, 0)
+        XCTAssertGreaterThanOrEqual(rect.minY, 0)
+    }
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `swift test`
+Expected: FAIL — `cannot find 'ShapeMath' in scope`
+
+- [ ] **Step 3: Write implementation**
+
+`Sources/CircleToSearch/ShapeMath.swift`:
+
+```swift
+import Foundation
+
+public enum ShapeMath {
+    /// Bounding box of a freeform drawn path, padded and clamped.
+    /// Returns nil for accidental clicks (too few points) or tiny shapes (<10x10 pre-padding).
+    public static func boundingBox(of points: [CGPoint], padding: CGFloat, clampedTo bounds: CGRect) -> CGRect? {
+        guard points.count >= 6 else { return nil }
+
+        var minX = CGFloat.greatestFiniteMagnitude, minY = CGFloat.greatestFiniteMagnitude
+        var maxX = -CGFloat.greatestFiniteMagnitude, maxY = -CGFloat.greatestFiniteMagnitude
+        for p in points {
+            minX = min(minX, p.x); minY = min(minY, p.y)
+            maxX = max(maxX, p.x); maxY = max(maxY, p.y)
+        }
+
+        guard maxX - minX >= 10, maxY - minY >= 10 else { return nil }
+
+        let rect = CGRect(
+            x: minX - padding,
+            y: minY - padding,
+            width: (maxX - minX) + 2 * padding,
+            height: (maxY - minY) + 2 * padding
+        ).intersection(bounds)
+
+        return rect.isEmpty ? nil : rect
+    }
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `swift test`
+Expected: PASS (all tests)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add Sources/CircleToSearch/ShapeMath.swift Tests/CircleToSearchTests/ShapeMathTests.swift
+git commit -m "feat: bounding-box math for drawn shapes"
+```
+
+---
+
+### Task 4: Shape-drawing overlay window
+
+**Files:**
+- Create: `Sources/CircleToSearch/ShapeOverlay.swift`
+
+**Interfaces:**
+- Consumes: `ShapeMath.boundingBox(of:padding:clampedTo:)` from Task 3
+- Produces: `@MainActor final class ShapeOverlay` with
+  `func begin(completion: @escaping (CGRect?) -> Void)` — shows a dimmed overlay on the screen under the mouse, lets the user draw a freeform path, and calls `completion` with the shape's bounding box in **top-left-origin global coordinates** (ready for `screencapture -R`), or `nil` on Esc/tiny shape. The overlay is fully dismissed before `completion` runs.
+
+- [ ] **Step 1: Write implementation**
+
+`Sources/CircleToSearch/ShapeOverlay.swift`:
+
+```swift
+import AppKit
+
+@MainActor
+final class ShapeOverlay {
+    private var window: NSWindow?
+    private var completion: ((CGRect?) -> Void)?
+
+    /// Shows the draw overlay on the screen under the mouse.
+    /// completion receives the bounding rect in top-left-origin global
+    /// coordinates (the format `screencapture -R` expects), or nil on cancel.
+    func begin(completion: @escaping (CGRect?) -> Void) {
+        guard window == nil else { return } // already active
+
+        self.completion = completion
+        let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
+            ?? NSScreen.main!
+
+        let window = OverlayWindow(
+            contentRect: screen.frame,
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false
+        )
+        window.level = .screenSaver
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.hasShadow = false
+        window.acceptsMouseMovedEvents = true
+
+        let view = DrawView(frame: NSRect(origin: .zero, size: screen.frame.size))
+        view.onFinish = { [weak self] rectInView in
+            self?.finish(rectInView: rectInView)
+        }
+        window.contentView = view
+
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeFirstResponder(view)
+        NSCursor.crosshair.push()
+
+        self.window = window
+    }
+
+    private func finish(rectInView: CGRect?) {
+        var globalRect: CGRect?
+        if let rect = rectInView, let window {
+            let screenRect = window.convertToScreen(rect) // bottom-left-origin global
+            let primaryHeight = NSScreen.screens[0].frame.height
+            globalRect = CGRect(
+                x: screenRect.origin.x,
+                y: primaryHeight - screenRect.maxY, // flip to top-left origin
+                width: screenRect.width,
+                height: screenRect.height
+            )
+        }
+
+        NSCursor.pop()
+        window?.orderOut(nil)
+        window = nil
+
+        let done = completion
+        completion = nil
+        done?(globalRect)
+    }
+}
+
+private final class OverlayWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+}
+
+private final class DrawView: NSView {
+    var onFinish: ((CGRect?) -> Void)?
+    private var points: [CGPoint] = []
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.black.withAlphaComponent(0.15).setFill()
+        bounds.fill()
+
+        guard points.count > 1 else { return }
+        let path = NSBezierPath()
+        path.lineWidth = 3
+        path.lineCapStyle = .round
+        path.lineJoinStyle = .round
+        path.move(to: points[0])
+        for point in points.dropFirst() {
+            path.line(to: point)
+        }
+        NSColor.systemBlue.setStroke()
+        path.stroke()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        points = [convert(event.locationInWindow, from: nil)]
+        needsDisplay = true
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        points.append(convert(event.locationInWindow, from: nil))
+        needsDisplay = true
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        let rect = ShapeMath.boundingBox(of: points, padding: 8, clampedTo: bounds)
+        points = []
+        onFinish?(rect)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 { // Esc
+            points = []
+            onFinish?(nil)
+        } else {
+            super.keyDown(with: event)
+        }
+    }
+}
+```
+
+- [ ] **Step 2: Build to verify**
+
+Run: `swift build`
+Expected: `Build complete!`
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add Sources/CircleToSearch/ShapeOverlay.swift
+git commit -m "feat: freeform shape-drawing overlay"
+```
+
+---
+
+### Task 5: ScreenCapture of a rect
 
 **Files:**
 - Create: `Sources/CircleToSearch/ScreenCapture.swift`
 
 **Interfaces:**
 - Consumes: nothing
-- Produces: `enum ScreenCapture` with `static func captureInteractive() -> Data?` — returns PNG data of the user-selected region, or `nil` if the user cancelled (Esc).
+- Produces: `enum ScreenCapture` with `static func capture(rect: CGRect) -> Data?` — `rect` is in top-left-origin global coordinates; returns PNG data or `nil` on failure.
 
 - [ ] **Step 1: Write implementation**
+
+`Sources/CircleToSearch/ScreenCapture.swift`:
 
 ```swift
 import Foundation
 
 enum ScreenCapture {
-    /// Launches macOS native region selection (crosshair). Blocks until the
-    /// user selects a region or presses Esc. Returns PNG data or nil on cancel.
-    static func captureInteractive() -> Data? {
+    /// Captures the given screen rect (top-left-origin global coordinates)
+    /// via the native screencapture CLI. Returns PNG data or nil.
+    static func capture(rect: CGRect) -> Data? {
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("circle-to-search-\(UUID().uuidString).png")
         defer { try? FileManager.default.removeItem(at: fileURL) }
 
+        let region = "\(Int(rect.minX)),\(Int(rect.minY)),\(Int(rect.width)),\(Int(rect.height))"
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-        // -i interactive selection, -x no sound
-        process.arguments = ["-i", "-x", fileURL.path]
+        // -x: no sound, -R: capture rect
+        process.arguments = ["-x", "-R", region, fileURL.path]
         do {
             try process.run()
             process.waitUntilExit()
@@ -306,7 +576,7 @@ enum ScreenCapture {
         }
 
         guard let data = try? Data(contentsOf: fileURL), !data.isEmpty else {
-            return nil // user cancelled
+            return nil
         }
         return data
     }
@@ -322,24 +592,25 @@ Expected: `Build complete!`
 
 ```bash
 git add Sources/CircleToSearch/ScreenCapture.swift
-git commit -m "feat: interactive region capture via screencapture CLI"
+git commit -m "feat: rect screen capture via screencapture CLI"
 ```
 
 ---
 
-### Task 4: ResultPanel floating window
+### Task 6: ResultPanel + global hotkey + end-to-end wiring
 
 **Files:**
 - Create: `Sources/CircleToSearch/ResultPanel.swift`
+- Create: `Sources/CircleToSearch/HotkeyManager.swift`
+- Modify: `Sources/CircleToSearch/AppDelegate.swift` (replace stub `captureAndAsk`)
 
 **Interfaces:**
-- Consumes: nothing
-- Produces: `final class ResultPanel` (main-actor) with:
-  - `func showLoading()` — shows panel near mouse with "Thinking…"
-  - `func showText(_ text: String)` — replaces content with the answer
-  - Panel closes on Esc; is non-activating (doesn't steal focus).
+- Consumes: `ShapeOverlay.begin(completion:)`, `ScreenCapture.capture(rect:)`, `ClaudeClient.ask(imageData:)` from Tasks 2–5.
+- Produces: working app. `HotkeyManager` exposes `init(handler: @escaping () -> Void)` registering ⌃Tab via Carbon. `ResultPanel` exposes `showLoading()` and `showText(_:)`.
 
-- [ ] **Step 1: Write implementation**
+- [ ] **Step 1: Write ResultPanel**
+
+`Sources/CircleToSearch/ResultPanel.swift`:
 
 ```swift
 import AppKit
@@ -396,31 +667,9 @@ final class ResultPanel {
 }
 ```
 
-- [ ] **Step 2: Build to verify**
+- [ ] **Step 2: Write HotkeyManager**
 
-Run: `swift build`
-Expected: `Build complete!`
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add Sources/CircleToSearch/ResultPanel.swift
-git commit -m "feat: floating result panel"
-```
-
----
-
-### Task 5: Global hotkey + end-to-end wiring
-
-**Files:**
-- Create: `Sources/CircleToSearch/HotkeyManager.swift`
-- Modify: `Sources/CircleToSearch/AppDelegate.swift` (replace stub `captureAndAsk`)
-
-**Interfaces:**
-- Consumes: `ScreenCapture.captureInteractive()`, `ClaudeClient.ask(imageData:)`, `ResultPanel.showLoading()/showText(_:)` from Tasks 2–4.
-- Produces: working app. `HotkeyManager` exposes `init(handler: @escaping () -> Void)` registering ⌥⌘Space via Carbon.
-
-- [ ] **Step 1: Write HotkeyManager**
+`Sources/CircleToSearch/HotkeyManager.swift`:
 
 ```swift
 import Carbon.HIToolbox
@@ -430,6 +679,8 @@ final class HotkeyManager {
     private var hotKeyRef: EventHotKeyRef?
     private static var handler: (() -> Void)?
 
+    /// Registers ⌃Tab as a global hotkey. Note: this shadows browser
+    /// tab-switching system-wide while the app runs.
     init(handler: @escaping () -> Void) {
         HotkeyManager.handler = handler
 
@@ -446,11 +697,10 @@ final class HotkeyManager {
             1, &eventType, nil, nil
         )
 
-        let hotKeyID = EventHotKeyID(signature: OSType(0x43545321), id: 1) // "CTS!"
-        // kVK_Space = 49; modifiers: option + command
+        let hotKeyID = EventHotKeyID(signature: OSType(0x4354_5321), id: 1) // "CTS!"
         RegisterEventHotKey(
-            UInt32(kVK_Space),
-            UInt32(optionKey | cmdKey),
+            UInt32(kVK_Tab),          // 48
+            UInt32(controlKey),       // ⌃
             hotKeyID,
             GetApplicationEventTarget(),
             0,
@@ -460,9 +710,9 @@ final class HotkeyManager {
 }
 ```
 
-- [ ] **Step 2: Wire AppDelegate**
+- [ ] **Step 3: Wire AppDelegate**
 
-Replace `AppDelegate.swift` contents:
+Replace `Sources/CircleToSearch/AppDelegate.swift` contents:
 
 ```swift
 import AppKit
@@ -470,6 +720,7 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var hotkeyManager: HotkeyManager!
+    private let overlay = ShapeOverlay()
     private let resultPanel = ResultPanel()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -480,8 +731,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         let menu = NSMenu()
-        let captureItem = NSMenuItem(title: "Capture & Ask", action: #selector(captureAndAsk), keyEquivalent: " ")
-        captureItem.keyEquivalentModifierMask = [.option, .command]
+        let captureItem = NSMenuItem(title: "Circle & Ask", action: #selector(captureAndAsk), keyEquivalent: "\t")
+        captureItem.keyEquivalentModifierMask = [.control]
         captureItem.target = self
         menu.addItem(captureItem)
         menu.addItem(.separator())
@@ -494,48 +745,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func captureAndAsk() {
-        // screencapture blocks; run off the main thread
-        Task.detached { [resultPanel] in
-            guard let imageData = ScreenCapture.captureInteractive() else { return }
-            await resultPanel.showLoading()
-            do {
-                let answer = try await ClaudeClient.ask(imageData: imageData)
-                await resultPanel.showText(answer)
-            } catch {
-                await resultPanel.showText("Error: \(error.localizedDescription)")
+        overlay.begin { [resultPanel] rect in
+            guard let rect else { return }
+            Task.detached {
+                // let the overlay window fully disappear before capturing,
+                // so the dim/stroke never shows up in the screenshot
+                try? await Task.sleep(for: .milliseconds(80))
+                guard let imageData = ScreenCapture.capture(rect: rect) else { return }
+                await resultPanel.showLoading()
+                do {
+                    let answer = try await ClaudeClient.ask(imageData: imageData)
+                    await resultPanel.showText(answer)
+                } catch {
+                    await resultPanel.showText("Error: \(error.localizedDescription)")
+                }
             }
         }
     }
 }
 ```
 
-- [ ] **Step 3: Build and run tests**
+- [ ] **Step 4: Build and run tests**
 
 Run: `swift build && swift test`
-Expected: `Build complete!`, tests PASS
+Expected: `Build complete!`, all tests PASS
 
-- [ ] **Step 4: Manual end-to-end verification**
+- [ ] **Step 5: Manual end-to-end verification**
 
 Run: `ANTHROPIC_API_KEY=sk-... swift run`
-Then: press ⌥⌘Space → drag-select a region → panel should appear with "Thinking…" then the answer.
+Then: press ⌃Tab → screen dims → draw a circle around something → blue stroke follows the mouse → on release, panel shows "Thinking…" then the answer.
 
 Notes for the tester:
-- First run: macOS prompts for **Screen Recording** permission for the terminal app running `swift run`. Grant it in System Settings → Privacy & Security → Screen Recording, then re-run.
-- Pressing Esc during selection must do nothing (no panel).
-- Unsetting `ANTHROPIC_API_KEY` and capturing must show "Error: ANTHROPIC_API_KEY is not set." in the panel.
+- First capture: macOS prompts for **Screen Recording** permission for the terminal running `swift run`. Grant it (System Settings → Privacy & Security → Screen Recording) and re-run.
+- Esc while drawing → overlay closes, nothing else happens.
+- A tiny scribble (<10px) → overlay closes, nothing happens.
+- Without `ANTHROPIC_API_KEY` → panel shows "Error: ANTHROPIC_API_KEY is not set."
+- ⌃Tab won't switch browser tabs while the app runs (global hotkey shadows it) — expected.
 
-Expected: answer text appears in floating panel.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add Sources/CircleToSearch/HotkeyManager.swift Sources/CircleToSearch/AppDelegate.swift
-git commit -m "feat: global hotkey and end-to-end capture-to-answer flow"
+git add Sources/CircleToSearch/ResultPanel.swift Sources/CircleToSearch/HotkeyManager.swift Sources/CircleToSearch/AppDelegate.swift
+git commit -m "feat: hotkey, result panel, and end-to-end circle-to-answer flow"
 ```
 
 ---
 
-### Task 6: README
+### Task 7: README
 
 **Files:**
 - Create: `README.md`
@@ -546,11 +802,12 @@ git commit -m "feat: global hotkey and end-to-end capture-to-answer flow"
 
 - [ ] **Step 1: Write README.md**
 
-```markdown
+````markdown
 # Circle to Search — for Mac
 
-Press **⌥⌘Space**, drag-select any region of your screen, and Claude tells you
-what it is — like Android's Circle to Search, as a macOS menu-bar app.
+Press **⌃Tab**, draw a circle (or any shape) around anything on your screen,
+and Claude tells you what it is — like Android's Circle to Search, as a
+macOS menu-bar app.
 
 ## Run
 
@@ -559,21 +816,24 @@ export ANTHROPIC_API_KEY=sk-ant-...
 swift run
 ```
 
-First run: grant **Screen Recording** permission to your terminal
+First capture: grant **Screen Recording** permission to your terminal
 (System Settings → Privacy & Security → Screen Recording), then re-run.
 
 ## Usage
 
-- **⌥⌘Space** (or menu bar icon → Capture & Ask): select a region, get an answer
-- **Esc** during selection: cancel
+- **⌃Tab** (or menu bar icon → Circle & Ask): draw a shape, get an answer
+- **Esc** while drawing: cancel
 - Menu bar icon → Quit
+
+Note: while the app runs, ⌃Tab is captured globally and won't switch
+browser tabs.
 
 ## Configuration
 
 - Model: `ClaudeClient.model` in `Sources/CircleToSearch/ClaudeClient.swift`
   (default `claude-opus-4-8`; use `claude-haiku-4-5` for cheaper answers)
-- Hotkey: `HotkeyManager.swift` (`kVK_Space`, `optionKey | cmdKey`)
-```
+- Hotkey: `HotkeyManager.swift` (`kVK_Tab`, `controlKey`)
+````
 
 - [ ] **Step 2: Commit**
 
