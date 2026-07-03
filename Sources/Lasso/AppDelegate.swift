@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyManager: HotkeyManager!
     private let overlay = ShapeOverlay()
     private let resultPanel = ResultPanel()
+    private let settingsWindow = SettingsWindowController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -18,6 +19,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         captureItem.keyEquivalentModifierMask = [.control, .option]
         captureItem.target = self
         menu.addItem(captureItem)
+        let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
@@ -27,8 +31,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @objc func openSettings() {
+        settingsWindow.show()
+    }
+
     @objc func captureAndAsk() {
-        overlay.begin { [resultPanel] rect in
+        overlay.begin { [weak self, resultPanel] rect in
             guard let rect else { return }
             Task.detached {
                 // let the overlay window fully disappear before capturing,
@@ -50,6 +58,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     let answer = try await GeminiClient.ask(imageData: imageData)
                     let thumbnail = NSImage(data: imageData)
                     await resultPanel.showAnswer(answer, thumbnail: thumbnail)
+                } catch LassoError.missingAPIKey {
+                    await resultPanel.showText(
+                        "No Gemini API key set. Add one in Settings — free at aistudio.google.com.",
+                        actionTitle: "Open Settings"
+                    ) {
+                        Task { @MainActor in self?.openSettings() }
+                    }
                 } catch {
                     await resultPanel.showText("Error: \(error.localizedDescription)")
                 }
