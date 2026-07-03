@@ -48,7 +48,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 await resultPanel.showLoading()
                 do {
-                    let answer = try await ClaudeClient.ask(imageData: imageData)
+                    let hasAPIKey = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"]?.isEmpty == false
+                    let answer = hasAPIKey
+                        ? try await ClaudeClient.ask(imageData: imageData)
+                        : try await ClaudeCodeClient.ask(imageData: imageData)
                     await resultPanel.showText(answer)
                 } catch {
                     await resultPanel.showText("Error: \(error.localizedDescription)")

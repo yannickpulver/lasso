@@ -6,6 +6,14 @@ macOS menu-bar app.
 
 ## Run
 
+With Claude Code installed (uses your Claude subscription, no API key):
+
+```bash
+swift run
+```
+
+Or with an API key (takes precedence over the `claude` CLI when set):
+
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 swift run
