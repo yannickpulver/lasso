@@ -6,19 +6,23 @@ final class SettingsWindowController {
     private var window: NSWindow?
 
     func show() {
-        if window == nil {
-            let hosting = NSHostingController(
-                rootView: SettingsView(onSaved: { [weak self] in self?.window?.close() })
-            )
-            let w = NSWindow(contentViewController: hosting)
+        let hosting = NSHostingController(
+            rootView: SettingsView(onSaved: { [weak self] in self?.window?.close() })
+        )
+        let w: NSWindow
+        if let existing = window {
+            w = existing
+            w.contentViewController = hosting
+        } else {
+            w = NSWindow(contentViewController: hosting)
             w.title = "Lasso Settings"
             w.styleMask = [.titled, .closable]
             w.isReleasedWhenClosed = false
             window = w
         }
         NSApp.activate(ignoringOtherApps: true)
-        window?.center()
-        window?.makeKeyAndOrderFront(nil)
+        w.center()
+        w.makeKeyAndOrderFront(nil)
     }
 }
 
