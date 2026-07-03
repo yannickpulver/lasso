@@ -1,0 +1,108 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        run: echo "version=$(cat VERSION)" >> $GITHUB_OUTPUT
+
+      - name: Run tests
+        run: swift test
+
+      - name: Build universal binary
+        run: swift build -c release --arch arm64 --arch x86_64
+
+      - name: Assemble app bundle
+        run: ./scripts/bundle.sh
+
+      - name: Import certificate
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
+          security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" build.keychain
+          rm certificate.p12
+
+      - name: Sign app
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          IDENTITY="Developer ID Application: Yannick Pulver ($APPLE_TEAM_ID)"
+          codesign --force --options runtime --sign "$IDENTITY" "dist/Lasso.app/Contents/MacOS/Lasso"
+          codesign --force --options runtime --sign "$IDENTITY" "dist/Lasso.app"
+          codesign --verify --deep --strict "dist/Lasso.app"
+
+      - name: Zip app bundle
+        run: ditto -c -k --keepParent "dist/Lasso.app" "dist/Lasso.zip"
+
+      - name: Notarize app
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          OUTPUT=$(xcrun notarytool submit "dist/Lasso.zip" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --wait 2>&1)
+          echo "$OUTPUT"
+          SUBMISSION_ID=$(echo "$OUTPUT" | grep "id:" | head -1 | awk '{print $2}')
+          if echo "$OUTPUT" | grep -q "status: Invalid"; then
+            echo "Notarization failed! Fetching log..."
+            xcrun notarytool log "$SUBMISSION_ID" \
+              --apple-id "$APPLE_ID" \
+              --team-id "$APPLE_TEAM_ID" \
+              --password "$APPLE_APP_PASSWORD"
+            exit 1
+          fi
+          if ! echo "$OUTPUT" | grep -q "status: Accepted"; then
+            echo "Notarization did not succeed. Status unknown."
+            exit 1
+          fi
+
+      - name: Staple app
+        run: xcrun stapler staple "dist/Lasso.app"
+
+      - name: Re-zip after stapling
+        run: |
+          rm dist/Lasso.zip
+          ditto -c -k --keepParent "dist/Lasso.app" "dist/Lasso.zip"
+
+      - name: Create Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Lasso ${{ steps.version.outputs.version }}
+          files: dist/Lasso.zip
+          generate_release_notes: true
+
+  update-homebrew:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/update-homebrew-tap.yml
+    with:
+      tag: v${{ needs.build.outputs.version }}
+    secrets:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
