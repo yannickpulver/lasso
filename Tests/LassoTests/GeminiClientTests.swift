@@ -57,4 +57,20 @@ final class GeminiClientTests: XCTestCase {
         KeyStore.delete()
         XCTAssertNil(GeminiClient.resolveAPIKey(env: [:]))
     }
+
+    func testParseUsageSumsOutputAndThinkingTokens() throws {
+        let usage = try XCTUnwrap(GeminiClient.parseUsage([
+            "usageMetadata": [
+                "promptTokenCount": 1200,
+                "candidatesTokenCount": 80,
+                "thoughtsTokenCount": 40,
+            ]
+        ]))
+        XCTAssertEqual(usage.input, 1200)
+        XCTAssertEqual(usage.output, 120)
+    }
+
+    func testParseUsageNilWithoutMetadata() {
+        XCTAssertNil(GeminiClient.parseUsage(["candidates": []]))
+    }
 }

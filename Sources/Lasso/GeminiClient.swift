@@ -13,6 +13,16 @@ public enum GeminiClient {
         return nil
     }
 
+    /// Token counts from a generateContent response; thinking tokens are
+    /// billed as output.
+    static func parseUsage(_ json: [String: Any]) -> (input: Int, output: Int)? {
+        guard let usage = json["usageMetadata"] as? [String: Any] else { return nil }
+        let input = usage["promptTokenCount"] as? Int ?? 0
+        let output = (usage["candidatesTokenCount"] as? Int ?? 0)
+            + (usage["thoughtsTokenCount"] as? Int ?? 0)
+        return (input, output)
+    }
+
     public static func buildRequestBody(imageData: Data, prompt: String) -> [String: Any] {
         [
             "contents": [
@@ -38,10 +48,23 @@ public enum GeminiClient {
         ]
     }
 
-    public static func ask(imageData: Data) async throws -> Answer {
+    public struct FollowUp {
+        public let question: String
+        public let previousAnswer: String
+
+        public init(question: String, previousAnswer: String) {
+            self.question = question
+            self.previousAnswer = previousAnswer
+        }
+    }
+
+    public static func ask(imageData: Data, followUp: FollowUp? = nil) async throws -> Answer {
         guard let apiKey = resolveAPIKey() else {
             throw LassoError.missingAPIKey
         }
+        let prompt = followUp.map {
+            AnswerPrompt.followUp(question: $0.question, previousAnswer: $0.previousAnswer)
+        } ?? defaultPrompt
 
         var request = URLRequest(url: URL(
             string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent"
@@ -51,7 +74,7 @@ public enum GeminiClient {
         request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         request.httpBody = try JSONSerialization.data(
-            withJSONObject: buildRequestBody(imageData: imageData, prompt: defaultPrompt)
+            withJSONObject: buildRequestBody(imageData: imageData, prompt: prompt)
         )
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -63,6 +86,10 @@ public enum GeminiClient {
         guard http.statusCode == 200 else {
             let message = ((json["error"] as? [String: Any])?["message"] as? String) ?? "HTTP \(http.statusCode)"
             throw LassoError.apiError(message)
+        }
+
+        if let usage = parseUsage(json) {
+            UsageStore.record(input: usage.input, output: usage.output)
         }
 
         guard let candidates = json["candidates"] as? [[String: Any]],
