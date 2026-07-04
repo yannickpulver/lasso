@@ -12,13 +12,18 @@ enum AnswerPrompt {
     - Foreign text: the translation, then its meaning if non-obvious
     - Person, artwork, film, game: who/what it is and why notable
     - Chart, error message, UI element: what it means and the next step
-    Start each fact line with a fitting emoji: 📍 location, ⭐ rating, 💰 price, \
-    🛍️ where to buy, 🌐 translation, ℹ️ context, ⚠️ warning.
+    Start each fact line with the emoji that truly fits that fact: 📍 location, \
+    ⭐ rating, 💰 price, 🛍️ physical shopping, ▶️ watch/video, 🎵 listen/stream, \
+    🎬 film, 📺 show, 🎮 game, 📖 read, 🌐 translation, ℹ️ context, ⚠️ warning. \
+    Never force a shopping emoji onto watching or streaming facts.
     Then machine-parsed lines (no emoji), each on its own line:
     - If the subject has a physical location: ADDRESS: <street and city>
     - Always: KIND: product | digital | place | other — product means a physical \
     good you could buy in a store; digital means software, apps, websites, games, \
     subscriptions, media
+    - Up to 2 lines, only when your search surfaced the exact page the user would \
+    open next (the YouTube video, the official site, the store page): \
+    LINK: <short label like "Watch on YouTube"> | <full URL>. Never guess URLs.
     - 2-3 lines: FOLLOWUP: <a short follow-up question the user would likely ask next>. \
     Make them actionable for THIS subject — e.g. a product: "Where can I buy this \
     cheapest nearby?", "Are there better alternatives?"; a place: "How do I get \
@@ -43,7 +48,12 @@ enum AnswerPrompt {
 
     <rules>
     - Never describe the image's visual appearance, style, or composition — the user sees it.
-    - Prefer a named, specific answer over a safe generic one.
+    - Prefer a named, specific answer over a safe generic one — but verify before naming: \
+    check that your candidate's distinctive features (people, logos, set design, \
+    typography, UI) actually match what is visible. A confident wrong name is the \
+    worst possible answer.
+    - If the evidence fits multiple candidates, lead with the best match prefixed \
+    "Likely:" and name the runner-up in a fact line.
     - If the exact entity cannot be resolved even after searching, answer in one line: \
     "Couldn't identify exactly — closest match: X" with a confidence hint.
     </rules>

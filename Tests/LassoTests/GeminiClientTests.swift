@@ -24,7 +24,7 @@ final class GeminiClientTests: XCTestCase {
 
         let generationConfig = try XCTUnwrap(body["generationConfig"] as? [String: Any])
         let thinkingConfig = try XCTUnwrap(generationConfig["thinkingConfig"] as? [String: Any])
-        XCTAssertEqual(thinkingConfig["thinkingLevel"] as? String, "low")
+        XCTAssertEqual(thinkingConfig["thinkingLevel"] as? String, "medium")
 
         XCTAssertEqual(GeminiClient.model, "gemini-3.5-flash")
         XCTAssertNoThrow(try JSONSerialization.data(withJSONObject: body))

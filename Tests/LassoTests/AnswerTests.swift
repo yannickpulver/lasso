@@ -52,6 +52,21 @@ final class AnswerTests: XCTestCase {
         XCTAssertEqual(answer.kind, .other)
     }
 
+    func testParseLinks() {
+        let answer = Answer.parse(text: """
+        Waveform — tech podcast
+        ▶️ Watch on YouTube
+        LINK: Watch on YouTube | https://youtube.com/watch?v=abc123
+        LINK: Official site | https://example.com
+        LINK: broken line without url
+        LINK: bad scheme | ftp://example.com
+        """)
+        XCTAssertEqual(answer.links.count, 2)
+        XCTAssertEqual(answer.links[0].title, "Watch on YouTube")
+        XCTAssertEqual(answer.links[0].url.absoluteString, "https://youtube.com/watch?v=abc123")
+        XCTAssertFalse(answer.body.contains("LINK:"))
+    }
+
     func testParseDigitalKind() {
         let answer = Answer.parse(text: "Lasso — macOS menu bar app\nKIND: digital")
         XCTAssertEqual(answer.kind, .digital)

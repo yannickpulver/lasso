@@ -25,6 +25,8 @@ public struct Answer {
     public let sources: [Source]
     public let kind: Kind
     public let followUps: [String]
+    /// Direct action links the model surfaced ("Watch on YouTube" → URL).
+    public let links: [Source]
 
     public init(
         title: String,
@@ -32,7 +34,8 @@ public struct Answer {
         address: String?,
         sources: [Source],
         kind: Kind = .other,
-        followUps: [String] = []
+        followUps: [String] = [],
+        links: [Source] = []
     ) {
         self.title = title
         self.body = body
@@ -40,6 +43,7 @@ public struct Answer {
         self.sources = sources
         self.kind = kind
         self.followUps = followUps
+        self.links = links
     }
 
     /// The bare entity name from the title ("NAME — what it is" → "NAME"),
@@ -61,6 +65,7 @@ public struct Answer {
         var address: String?
         var kind: Kind = .other
         var followUps: [String] = []
+        var links: [Source] = []
         var lines: [String] = []
 
         for raw in text.split(separator: "\n", omittingEmptySubsequences: false) {
@@ -76,6 +81,17 @@ public struct Answer {
                     .trimmingCharacters(in: .whitespaces)
                     .lowercased()
                 kind = Kind(rawValue: value) ?? .other
+            } else if upper.hasPrefix("LINK:") {
+                let value = trimmed.dropFirst("LINK:".count)
+                let parts = value.split(separator: "|", maxSplits: 1)
+                if parts.count == 2,
+                   let url = URL(string: parts[1].trimmingCharacters(in: .whitespaces)),
+                   url.scheme?.hasPrefix("http") == true {
+                    links.append(Source(
+                        title: parts[0].trimmingCharacters(in: .whitespaces),
+                        url: url
+                    ))
+                }
             } else if upper.hasPrefix("FOLLOWUP:") {
                 let value = trimmed.dropFirst("FOLLOWUP:".count)
                     .trimmingCharacters(in: .whitespaces)
@@ -94,7 +110,8 @@ public struct Answer {
                 address: address,
                 sources: sources,
                 kind: kind,
-                followUps: followUps
+                followUps: followUps,
+                links: links
             )
         }
 
@@ -108,7 +125,8 @@ public struct Answer {
             address: address,
             sources: sources,
             kind: kind,
-            followUps: followUps
+            followUps: followUps,
+            links: links
         )
     }
 }

@@ -262,9 +262,12 @@ final class ResultPanel: NSObject {
             stack.addArrangedSubview(body)
         }
 
-        // Quick actions (maps, shopping) on their own row; web sources on a
-        // second row — a single row overflows the card.
+        // Quick actions (model links, maps, shopping) on their own row; web
+        // sources on a second row — a single row overflows the card.
         var actions: [NSView] = []
+        for link in answer.links.prefix(2) {
+            actions.append(makeChip(title: "🔗 \(link.title)", url: link.url))
+        }
         if let address = answer.address, let url = mapsURL(for: address) {
             actions.append(makeChip(title: "📍 Open in Maps", url: url))
         }
@@ -287,25 +290,53 @@ final class ResultPanel: NSObject {
             }
         }
 
-        let followUps = answer.followUps.prefix(3)
-        if !followUps.isEmpty, onFollowUp != nil {
+        if onFollowUp != nil {
             addSeparator(to: stack)
-            for question in followUps {
-                let button = FollowUpButton(
-                    title: "✨ \(question)",
-                    target: self,
-                    action: #selector(askFollowUp(_:))
-                )
-                button.question = question
-                button.isBordered = false
-                button.contentTintColor = .secondaryLabelColor
-                button.font = .systemFont(ofSize: 12)
-                button.alignment = .left
-                stack.addArrangedSubview(button)
-                stack.setCustomSpacing(7, after: button)
+            for question in answer.followUps.prefix(3) {
+                let card = makeFollowUpCard(question: question, width: contentWidth)
+                stack.addArrangedSubview(card)
+                stack.setCustomSpacing(6, after: card)
             }
+
+            let field = NSTextField()
+            field.placeholderString = "Ask anything about this…"
+            field.font = .systemFont(ofSize: 12)
+            field.bezelStyle = .roundedBezel
+            field.focusRingType = .none
+            field.target = self
+            field.action = #selector(submitCustomQuestion(_:))
+            (field.cell as? NSTextFieldCell)?.sendsActionOnEndEditing = false
+            field.translatesAutoresizingMaskIntoConstraints = false
+            field.widthAnchor.constraint(equalToConstant: contentWidth).isActive = true
+            if let last = stack.arrangedSubviews.last {
+                stack.setCustomSpacing(10, after: last)
+            }
+            stack.addArrangedSubview(field)
         }
         return stack
+    }
+
+    /// A tappable card row for a suggested follow-up question.
+    private func makeFollowUpCard(question: String, width: CGFloat) -> NSView {
+        let button = FollowUpButton(
+            title: "✨  \(question)",
+            target: self,
+            action: #selector(askFollowUp(_:))
+        )
+        button.question = question
+        button.isBordered = false
+        button.contentTintColor = .labelColor
+        button.font = .systemFont(ofSize: 12)
+        button.alignment = .left
+        button.wantsLayer = true
+        button.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.08).cgColor
+        button.layer?.cornerRadius = 8
+        button.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            button.widthAnchor.constraint(equalToConstant: width),
+            button.heightAnchor.constraint(equalToConstant: 30),
+        ])
+        return button
     }
 
     private func addSeparator(to stack: NSStackView) {
@@ -403,6 +434,12 @@ final class ResultPanel: NSObject {
 
     @objc private func askFollowUp(_ sender: NSButton) {
         guard let question = (sender as? FollowUpButton)?.question else { return }
+        onFollowUp?(question)
+    }
+
+    @objc private func submitCustomQuestion(_ sender: NSTextField) {
+        let question = sender.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !question.isEmpty else { return }
         onFollowUp?(question)
     }
 }
