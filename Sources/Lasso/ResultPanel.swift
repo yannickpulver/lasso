@@ -9,6 +9,10 @@ final class ResultPanel: NSObject {
     private var clickMonitor: Any?
     private var keyMonitor: Any?
     private var loadingTimer: Timer?
+    /// While a request is in flight the card is pinned: it floats on top and
+    /// outside clicks pass through to other apps instead of dismissing it.
+    /// Flipped on once the answer (or an error) is final.
+    private var dismissesOnOutsideClick = false
 
     private static let loadingPhrases = [
         "🤠 Lassoing that in…",
@@ -41,6 +45,7 @@ final class ResultPanel: NSObject {
     // MARK: - Public API
 
     func showLoading() {
+        dismissesOnOutsideClick = false // pin while searching
         var phrases = Self.loadingPhrases.shuffled()
 
         let label = NSTextField(labelWithString: phrases[0])
@@ -73,13 +78,69 @@ final class ResultPanel: NSObject {
         }
     }
 
+    /// Instant on-device "first read" (OCR / barcodes) shown before the model
+    /// answers. Stays pinned; the streamed answer replaces it in place.
+    func showQuickRead(_ read: VisionRecognizer.QuickRead) {
+        loadingTimer?.invalidate()
+        loadingTimer = nil
+        dismissesOnOutsideClick = false // still enriching — stay pinned
+
+        let stack = baseStack()
+        let contentWidth = Self.cardWidth - stack.edgeInsets.left - stack.edgeInsets.right
+
+        let hint = NSTextField(labelWithString: "🔎  Identifying…")
+        hint.font = .systemFont(ofSize: 12, weight: .medium)
+        hint.textColor = .secondaryLabelColor
+        stack.addArrangedSubview(hint)
+        stack.setCustomSpacing(8, after: hint)
+
+        let body = NSTextField(wrappingLabelWithString: read.lines.joined(separator: "\n"))
+        body.font = .systemFont(ofSize: 14)
+        body.textColor = .labelColor
+        body.isSelectable = true
+        body.maximumNumberOfLines = 8
+        body.lineBreakMode = .byTruncatingTail
+        body.preferredMaxLayoutWidth = contentWidth
+        stack.addArrangedSubview(body)
+
+        render(stack, reuse: panel != nil)
+    }
+
+    /// Replaces the loading phrases with the model's live reasoning summary
+    /// while it searches. Updates in place as new thoughts stream in.
+    func showThinking(_ text: String) {
+        loadingTimer?.invalidate() // real thoughts replace the canned phrases
+        loadingTimer = nil
+        dismissesOnOutsideClick = false // still searching — stay pinned
+
+        let label = NSTextField(labelWithString: "🔎  \(text)")
+        label.font = .systemFont(ofSize: 14, weight: .medium)
+        label.textColor = .secondaryLabelColor
+        label.lineBreakMode = .byTruncatingTail
+        label.maximumNumberOfLines = 1
+
+        let stack = baseStack()
+        stack.addArrangedSubview(label)
+        render(stack, reuse: panel != nil)
+    }
+
     func showText(_ text: String, actionTitle: String? = nil, action: (() -> Void)? = nil) {
         self.action = action
+        dismissesOnOutsideClick = true // terminal message — clicking away dismisses
         present(makeMessageContent(text: text, actionTitle: actionTitle))
     }
 
+    /// Called once the answer stream ends: unpins the card so an outside
+    /// click dismisses it again.
+    func finishStreaming() {
+        dismissesOnOutsideClick = true
+    }
+
+    /// Renders (or updates, while streaming) the answer card. When a card is
+    /// already on screen it is updated in place — no fade, no reposition — so
+    /// progressive streaming updates don't flicker.
     func showAnswer(_ answer: Answer, thumbnail: NSImage?) {
-        present(makeAnswerContent(answer: answer, thumbnail: thumbnail))
+        render(makeAnswerContent(answer: answer, thumbnail: thumbnail), reuse: panel != nil)
     }
 
     func dismiss() {
@@ -96,12 +157,14 @@ final class ResultPanel: NSObject {
     // MARK: - Card presentation
 
     private func present(_ stack: NSStackView) {
-        let previousFrame = (panel?.isVisible == true) ? panel?.frame : nil
-        dismiss()
+        render(stack, reuse: false)
+    }
 
-        // Frosted-glass card. The material is composited behind the window by
-        // the window server, so it must be clipped with maskImage — a plain
-        // layer cornerRadius leaves opaque corners outside the rounding.
+    /// Builds the frosted-glass card around `stack`. The material is composited
+    /// behind the window by the window server, so it must be clipped with
+    /// maskImage — a plain layer cornerRadius leaves opaque corners outside the
+    /// rounding.
+    private func makeCard(around stack: NSStackView) -> NSVisualEffectView {
         let card = NSVisualEffectView()
         card.material = .hudWindow
         card.blendingMode = .behindWindow
@@ -121,9 +184,35 @@ final class ResultPanel: NSObject {
             stack.bottomAnchor.constraint(equalTo: card.bottomAnchor),
             stack.widthAnchor.constraint(equalToConstant: Self.cardWidth),
         ])
+        return card
+    }
 
+    /// Shows `stack` in the card. `reuse: true` swaps the content of the
+    /// existing panel in place (used for streaming updates); `reuse: false`
+    /// tears down any old panel and fades a fresh one in.
+    private func render(_ stack: NSStackView, reuse: Bool) {
+        // Any real content ends the loading-phrase cycle.
+        loadingTimer?.invalidate()
+        loadingTimer = nil
+
+        let card = makeCard(around: stack)
         let height = card.fittingSize.height
         let size = NSSize(width: Self.cardWidth, height: height)
+
+        // In-place update: keep the panel, monitors and top edge; no fade.
+        if reuse, let panel {
+            let frame = panel.frame
+            panel.contentView = card
+            panel.setFrame(
+                NSRect(x: frame.origin.x, y: frame.maxY - height, width: size.width, height: height),
+                display: true
+            )
+            panel.invalidateShadow()
+            return
+        }
+
+        let previousFrame = (panel?.isVisible == true) ? panel?.frame : nil
+        dismiss()
 
         // Keep the top edge anchored on loading → answer transitions
         let origin: NSPoint
@@ -158,9 +247,13 @@ final class ResultPanel: NSObject {
         }
         self.panel = panel
 
-        // Click anywhere outside (other apps) or press Esc to dismiss
+        // Click anywhere outside (other apps) or press Esc to dismiss — but
+        // only once the search is done; while pinned, clicks pass through.
         clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            Task { @MainActor in self?.dismiss() }
+            Task { @MainActor in
+                guard let self, self.dismissesOnOutsideClick else { return }
+                self.dismiss()
+            }
         }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             if event.keyCode == 53 { // Esc

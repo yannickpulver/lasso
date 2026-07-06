@@ -12,6 +12,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         installEditMenu()
 
+        // Preload the on-device OCR model so the first capture's instant read
+        // isn't stuck behind a one-time cold start.
+        Task.detached { VisionRecognizer.warmUp() }
+
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.image =
             NSImage(systemSymbolName: "lasso.badge.sparkles", accessibilityDescription: "Lasso")
@@ -81,14 +85,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await resultPanel.showLoading()
                 do {
                     let context = previous.title + "\n" + previous.body
-                    let answer = try await GeminiClient.ask(
+                    let thumbnail = NSImage(data: imageData)
+                    for try await event in GeminiClient.stream(
                         imageData: imageData,
                         followUp: .init(question: question, previousAnswer: context)
-                    )
-                    await MainActor.run {
-                        self?.installFollowUps(imageData: imageData, previous: answer)
+                    ) {
+                        switch event {
+                        case .thinking(let status):
+                            await resultPanel.showThinking(status)
+                        case .answer(let partial):
+                            await MainActor.run {
+                                self?.installFollowUps(imageData: imageData, previous: partial)
+                            }
+                            await resultPanel.showAnswer(partial, thumbnail: thumbnail)
+                        }
                     }
-                    await resultPanel.showAnswer(answer, thumbnail: NSImage(data: imageData))
+                    await resultPanel.finishStreaming()
                 } catch {
                     await resultPanel.showText("Error: \(error.localizedDescription)")
                 }
@@ -114,14 +126,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                     return
                 }
-                await resultPanel.showLoading()
+                // Instant on-device first read (OCR/barcodes) while the model
+                // works. Text-heavy crops are answered here immediately.
+                let quickRead = VisionRecognizer.recognize(imageData: imageData)
+                if quickRead.isUseful {
+                    await resultPanel.showQuickRead(quickRead)
+                } else {
+                    await resultPanel.showLoading()
+                }
+                // Text is already read on-device, so the model can reason less
+                // and answer faster; images need deeper thinking to identify.
+                let thinkingLevel = quickRead.isUseful ? "low" : "medium"
                 do {
-                    let answer = try await GeminiClient.ask(imageData: imageData)
                     let thumbnail = NSImage(data: imageData)
-                    await MainActor.run {
-                        self?.installFollowUps(imageData: imageData, previous: answer)
+                    for try await event in GeminiClient.stream(
+                        imageData: imageData, thinkingLevel: thinkingLevel
+                    ) {
+                        switch event {
+                        case .thinking(let status):
+                            // Don't overwrite a useful first read with progress text.
+                            if !quickRead.isUseful {
+                                await resultPanel.showThinking(status)
+                            }
+                        case .answer(let partial):
+                            await MainActor.run {
+                                self?.installFollowUps(imageData: imageData, previous: partial)
+                            }
+                            await resultPanel.showAnswer(partial, thumbnail: thumbnail)
+                        }
                     }
-                    await resultPanel.showAnswer(answer, thumbnail: thumbnail)
+                    await resultPanel.finishStreaming()
                 } catch LassoError.missingAPIKey {
                     await resultPanel.showText(
                         "No Gemini API key set. Add one in Settings — free at aistudio.google.com.",
