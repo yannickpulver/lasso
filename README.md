@@ -33,13 +33,17 @@ When running from a terminal, Screen Recording permission goes to the terminal a
 
 - **⌃⌥X** (or menu bar icon → Lasso & Ask): draw around anything, get an answer
 - **Esc** while drawing: cancel
-- Result card: click source chips to open them, 📍 opens the address in Maps,
+- Result card: text is read instantly on-device while the full answer streams
+  in; the card stays pinned on top while searching (clicks pass through), then
+  click source chips to open them, 📍 opens the address in Maps,
   **Esc** or clicking into another app dismisses it, drag it anywhere
 - Menu bar icon → Quit
 
 ## Configuration
 
 - Gemini model & thinking level: `Sources/Lasso/GeminiClient.swift`
-  (default `gemini-3.5-flash`, `thinkingLevel: low`)
+  (default `gemini-3.5-flash`; thinking is routed — `low` for text crops,
+  `medium` for image identification)
+- Instant on-device first read (OCR / barcodes): `Sources/Lasso/VisionRecognizer.swift`
 - Hotkey: `Sources/Lasso/HotkeyManager.swift` (`kVK_ANSI_X`, `controlKey | optionKey`)
 - Answer style: `Sources/Lasso/AnswerPrompt.swift`

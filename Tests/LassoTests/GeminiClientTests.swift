@@ -25,9 +25,20 @@ final class GeminiClientTests: XCTestCase {
         let generationConfig = try XCTUnwrap(body["generationConfig"] as? [String: Any])
         let thinkingConfig = try XCTUnwrap(generationConfig["thinkingConfig"] as? [String: Any])
         XCTAssertEqual(thinkingConfig["thinkingLevel"] as? String, "medium")
+        XCTAssertEqual(thinkingConfig["includeThoughts"] as? Bool, true)
 
         XCTAssertEqual(GeminiClient.model, "gemini-3.5-flash")
         XCTAssertNoThrow(try JSONSerialization.data(withJSONObject: body))
+    }
+
+    func testBuildRequestBodyRoutesThinkingLevel() throws {
+        let body = GeminiClient.buildRequestBody(
+            imageData: Data([0x89]), prompt: "translate", thinkingLevel: "low"
+        )
+        let thinkingConfig = try XCTUnwrap(
+            (body["generationConfig"] as? [String: Any])?["thinkingConfig"] as? [String: Any]
+        )
+        XCTAssertEqual(thinkingConfig["thinkingLevel"] as? String, "low")
     }
 
     func testResolveAPIKeyPrefersKeychain() throws {
@@ -72,5 +83,43 @@ final class GeminiClientTests: XCTestCase {
 
     func testParseUsageNilWithoutMetadata() {
         XCTAssertNil(GeminiClient.parseUsage(["candidates": []]))
+    }
+
+    func testParseChunkExtractsTextSourcesAndUsage() throws {
+        let chunk = GeminiClient.parseChunk([
+            "candidates": [[
+                "content": ["parts": [["text": "Eiffel Tower"], ["text": " — Paris"]]],
+                "groundingMetadata": [
+                    "groundingChunks": [
+                        ["web": ["uri": "https://wikipedia.org/eiffel", "title": "wikipedia.org"]],
+                    ],
+                ],
+            ]],
+            "usageMetadata": ["promptTokenCount": 10, "candidatesTokenCount": 5],
+        ])
+        XCTAssertEqual(chunk.text, "Eiffel Tower — Paris")
+        XCTAssertTrue(chunk.thought.isEmpty)
+        XCTAssertEqual(chunk.sources.count, 1)
+        XCTAssertEqual(chunk.sources.first?.url.absoluteString, "https://wikipedia.org/eiffel")
+        XCTAssertEqual(chunk.usage?.input, 10)
+        XCTAssertEqual(chunk.usage?.output, 5)
+    }
+
+    func testParseChunkSeparatesThoughtFromAnswer() {
+        let chunk = GeminiClient.parseChunk([
+            "candidates": [["content": ["parts": [
+                ["text": "**Investigating the icon**\n\nLooking…", "thought": true],
+                ["text": "Answer text"],
+            ]]]],
+        ])
+        XCTAssertEqual(chunk.text, "Answer text")
+        XCTAssertEqual(chunk.thought, "**Investigating the icon**\n\nLooking…")
+    }
+
+    func testThoughtHeaderReturnsLatestCompletedHeader() {
+        let thoughts = "**Investigating the icon**\n\nLooking… **Confirming identity**\n\nGot it, **half"
+        // Only completed ** pairs count; the trailing "**half" is unclosed.
+        XCTAssertEqual(GeminiClient.thoughtHeader(thoughts), "Confirming identity")
+        XCTAssertNil(GeminiClient.thoughtHeader("no headers yet"))
     }
 }
